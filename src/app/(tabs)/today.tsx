@@ -36,6 +36,7 @@ export default function TodayScreen() {
   const [viewDate, setViewDate] = useState<Date>(() => new Date());
   const [selectedBlock, setSelectedBlock] = useState<TimeBlock>(() => timeBlockFromDate(today));
   const plan = useDailyPlan(viewDate);
+  const theme = useTheme();
   const activeLevel = useUIStore((state) => state.activeLevel);
   const setActiveLevel = useUIStore((state) => state.setActiveLevel);
   const todayView = useUIStore((state) => state.todayView);
@@ -104,7 +105,16 @@ export default function TodayScreen() {
 
           {plan ? (
             <>
-              <PlanHero plan={plan} />
+              <PlanHero plan={plan} doneLabel={isViewingToday ? 'done today' : 'done'} />
+
+              {!isViewingToday ? (
+                <View style={[styles.readOnlyNote, { backgroundColor: theme.backgroundSelected }]}>
+                  <Ionicons name="lock-closed-outline" size={14} color={theme.textSecondary} />
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Past days are read-only. Complete tasks on the day they happen.
+                  </ThemedText>
+                </View>
+              ) : null}
 
               {isViewingToday && plan.items.length > 0 ? (
                 <PrimaryButton label="Run today's plan" onPress={() => router.push('/run-day')} />
@@ -116,7 +126,12 @@ export default function TodayScreen() {
 
               {todayView === 'timeline' ? (
                 blockItems.length > 0 ? (
-                  <DailyTimeline plan={plan} block={selectedBlock} onToggle={handleToggle} />
+                  <DailyTimeline
+                    plan={plan}
+                    block={selectedBlock}
+                    onToggle={handleToggle}
+                    disabled={!isViewingToday}
+                  />
                 ) : (
                   <EmptyBlock block={selectedBlock} />
                 )
@@ -127,7 +142,12 @@ export default function TodayScreen() {
                       <SectionTitle>Anytime</SectionTitle>
                       <Card>
                         {flexibleItems.map((item) => (
-                          <ChecklistItem key={item.actionId} item={item} onToggle={handleToggle} />
+                          <ChecklistItem
+                            key={item.actionId}
+                            item={item}
+                            onToggle={handleToggle}
+                            disabled={!isViewingToday}
+                          />
                         ))}
                       </Card>
                     </View>
@@ -138,7 +158,12 @@ export default function TodayScreen() {
                       <SectionTitle>{TIME_BLOCK_LABELS[selectedBlock]}</SectionTitle>
                       <Card>
                         {blockItems.map((item) => (
-                          <ChecklistItem key={item.actionId} item={item} onToggle={handleToggle} />
+                          <ChecklistItem
+                            key={item.actionId}
+                            item={item}
+                            onToggle={handleToggle}
+                            disabled={!isViewingToday}
+                          />
                         ))}
                       </Card>
                     </View>
@@ -256,7 +281,7 @@ function ViewToggle({
   );
 }
 
-function PlanHero({ plan }: { plan: DailyPlan }) {
+function PlanHero({ plan, doneLabel }: { plan: DailyPlan; doneLabel: string }) {
   const theme = useTheme();
   const { completed, total } = {
     completed: plan.items.filter((item) => item.completed).length,
@@ -271,7 +296,7 @@ function PlanHero({ plan }: { plan: DailyPlan }) {
             {completed}/{total}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            done today
+            {doneLabel}
           </ThemedText>
         </View>
         <ThemedText type="small" themeColor="textSecondary" style={styles.heroTime}>
@@ -346,6 +371,14 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: Spacing.two,
+  },
+  readOnlyNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    borderRadius: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
   },
   sectionTitle: {
     marginTop: Spacing.two,

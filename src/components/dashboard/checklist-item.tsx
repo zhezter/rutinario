@@ -8,9 +8,10 @@ import { useTheme } from '@/hooks/use-theme';
 type ChecklistItemProps = {
   item: DailyPlanItem;
   onToggle: (item: DailyPlanItem) => void;
+  disabled?: boolean;
 };
 
-export function ChecklistItem({ item, onToggle }: ChecklistItemProps) {
+export function ChecklistItem({ item, onToggle, disabled }: ChecklistItemProps) {
   const theme = useTheme();
 
   const meta: string[] = [];
@@ -21,7 +22,12 @@ export function ChecklistItem({ item, onToggle }: ChecklistItemProps) {
   return (
     <Pressable
       onPress={() => onToggle(item)}
-      style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}>
+      disabled={disabled}
+      style={({ pressed }) => [
+        styles.row,
+        disabled && styles.rowDisabled,
+        pressed && !disabled && { opacity: 0.6 },
+      ]}>
       <View
         style={[
           styles.checkbox,
@@ -60,6 +66,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: Spacing.two,
     paddingVertical: Spacing.two,
+  },
+  rowDisabled: {
+    opacity: 0.6,
   },
   checkbox: {
     width: 22,

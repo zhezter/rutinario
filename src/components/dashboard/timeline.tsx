@@ -16,9 +16,10 @@ type DailyTimelineProps = {
   plan: DailyPlan;
   block: TimeBlock;
   onToggle: (item: DailyPlanItem) => void;
+  disabled?: boolean;
 };
 
-export function DailyTimeline({ plan, block, onToggle }: DailyTimelineProps) {
+export function DailyTimeline({ plan, block, onToggle, disabled }: DailyTimelineProps) {
   const items = plan.items.filter((item) => item.timeBlock === block);
 
   return (
@@ -28,6 +29,7 @@ export function DailyTimeline({ plan, block, onToggle }: DailyTimelineProps) {
           key={item.actionId}
           item={item}
           onToggle={onToggle}
+          disabled={disabled}
           first={index === 0}
         />
       ))}
@@ -38,10 +40,12 @@ export function DailyTimeline({ plan, block, onToggle }: DailyTimelineProps) {
 function TimelineRow({
   item,
   onToggle,
+  disabled,
   first,
 }: {
   item: DailyPlanItem;
   onToggle: (item: DailyPlanItem) => void;
+  disabled?: boolean;
   first: boolean;
 }) {
   const theme = useTheme();
@@ -56,7 +60,12 @@ function TimelineRow({
   return (
     <Pressable
       onPress={() => onToggle(item)}
-      style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}>
+      disabled={disabled}
+      style={({ pressed }) => [
+        styles.row,
+        disabled && styles.rowDisabled,
+        pressed && !disabled && { opacity: 0.6 },
+      ]}>
       <View style={styles.nodeColumn}>
         {!first && (
           <View
@@ -109,6 +118,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingVertical: Spacing.two,
+  },
+  rowDisabled: {
+    opacity: 0.6,
   },
   nodeColumn: {
     width: NODE_COLUMN,
