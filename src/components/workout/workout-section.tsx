@@ -7,6 +7,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Card } from '@/components/ui/card';
 import { ActionSheet, type SheetAction } from '@/components/ui/sheet';
 import { ConfirmSheet, PromptSheet } from '@/components/ui/prompt';
+import { WorkoutTemplatesSheet } from '@/components/workout/workout-templates-sheet';
 import { Spacing } from '@/constants/theme';
 import {
   createWorkout,
@@ -42,6 +43,8 @@ export function WorkoutSection() {
     message: string;
     onConfirm: () => void;
   } | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [addMenu, setAddMenu] = useState(false);
 
   useLiveTables(
     ['workouts', 'workout_days', 'workout_exercises', 'exercises', 'exercise_logs'],
@@ -61,6 +64,19 @@ export function WorkoutSection() {
         await createWorkout(name);
       },
     });
+
+  const addActions: SheetAction[] = [
+    {
+      label: 'Start from a template',
+      icon: 'albums-outline',
+      onPress: () => setShowTemplates(true),
+    },
+    {
+      label: 'Blank workout',
+      icon: 'add-circle-outline',
+      onPress: handleNewWorkout,
+    },
+  ];
 
   const menuActions: SheetAction[] = menuTarget
     ? [
@@ -102,7 +118,7 @@ export function WorkoutSection() {
             Your training split
           </ThemedText>
         </View>
-        <Pressable onPress={handleNewWorkout} hitSlop={8} style={styles.headerButton}>
+        <Pressable onPress={() => setAddMenu(true)} hitSlop={8} style={styles.headerButton}>
           <Ionicons name="add-circle-outline" size={22} color={theme.accent} />
         </Pressable>
       </View>
@@ -164,6 +180,25 @@ export function WorkoutSection() {
         title={menuTarget?.name}
         onClose={() => setMenuTarget(null)}
         actions={menuActions}
+      />
+
+      <ActionSheet
+        visible={addMenu}
+        title="New workout"
+        onClose={() => setAddMenu(false)}
+        actions={addActions}
+      />
+
+      <WorkoutTemplatesSheet
+        visible={showTemplates}
+        onClose={() => setShowTemplates(false)}
+        onApplied={(workoutId) => {
+          setShowTemplates(false);
+          router.push({
+            pathname: '/workout/[id]',
+            params: { id: String(workoutId) },
+          });
+        }}
       />
 
       {prompt ? (
