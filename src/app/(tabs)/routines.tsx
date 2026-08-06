@@ -336,80 +336,88 @@ function DomainBlock({
   onLongPressSystem: (item: { id: number; name: string; domainId: number }) => void;
   onLongPressRoutine: (item: { id: number; name: string; systemId: number; description?: string | null }) => void;
 }) {
+  const theme = useTheme();
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <View style={styles.domain}>
       <Pressable
+        onPress={() => setExpanded((current) => !current)}
         onLongPress={() => onLongPressDomain({ id: domain.id, name: domain.name })}
         delayLongPress={300}
-        style={styles.domainHeader}>
+        style={({ pressed }) => [styles.domainHeader, pressed && { opacity: 0.7 }]}>
         <View style={[styles.domainDot, { backgroundColor: domainColor(domain.name) }]} />
         <ThemedText type="smallBold" style={styles.domainName}>
           {domain.name}
         </ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          · hold for options
-        </ThemedText>
+        <Ionicons
+          name={expanded ? 'chevron-up' : 'chevron-down'}
+          size={18}
+          color={theme.textSecondary}
+        />
       </Pressable>
 
-      {domain.systems.map((system) => (
-        <View key={system.id} style={styles.system}>
-          <Pressable
-            onLongPress={() =>
-              onLongPressSystem({ id: system.id, name: system.name, domainId: domain.id })
-            }
-            delayLongPress={300}
-            style={styles.systemName}>
-            <ThemedText type="small" themeColor="textSecondary">
-              {system.name}
-            </ThemedText>
-          </Pressable>
-          {system.routines.map((routine) => {
-            const actions = routine.procedures.flatMap((procedure) => procedure.actions);
-            const summary = summarizeRoutine(actions);
-            const meta = [
-              summary.frequency,
-              durationLabel(summary.durationMin),
-              summary.priority,
-            ]
-              .filter((part): part is string => part !== null)
-              .join(' · ');
-
-            return (
+      {expanded
+        ? domain.systems.map((system) => (
+            <View key={system.id} style={styles.system}>
               <Pressable
-                key={routine.id}
-                onPress={() =>
-                  router.push({
-                    pathname: '/routine/[id]',
-                    params: { id: String(routine.id) },
-                  })
-                }
                 onLongPress={() =>
-                  onLongPressRoutine({
-                    id: routine.id,
-                    name: routine.name,
-                    description: routine.description,
-                    systemId: system.id,
-                  })
+                  onLongPressSystem({ id: system.id, name: system.name, domainId: domain.id })
                 }
-                delayLongPress={300}>
-                {({ pressed }) => (
-                  <Card style={[styles.routineCard, pressed && { opacity: 0.6 }]}>
-                    <ThemedText type="smallBold">{routine.name}</ThemedText>
-                    {routine.description ? (
-                      <ThemedText type="small" themeColor="textSecondary">
-                        {routine.description}
-                      </ThemedText>
-                    ) : null}
-                    <ThemedText type="small" themeColor="textSecondary">
-                      {meta}
-                    </ThemedText>
-                  </Card>
-                )}
+                delayLongPress={300}
+                style={styles.systemName}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {system.name}
+                </ThemedText>
               </Pressable>
-            );
-          })}
-        </View>
-      ))}
+              {system.routines.map((routine) => {
+                const actions = routine.procedures.flatMap((procedure) => procedure.actions);
+                const summary = summarizeRoutine(actions);
+                const meta = [
+                  summary.frequency,
+                  durationLabel(summary.durationMin),
+                  summary.priority,
+                ]
+                  .filter((part): part is string => part !== null)
+                  .join(' · ');
+
+                return (
+                  <Pressable
+                    key={routine.id}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/routine/[id]',
+                        params: { id: String(routine.id) },
+                      })
+                    }
+                    onLongPress={() =>
+                      onLongPressRoutine({
+                        id: routine.id,
+                        name: routine.name,
+                        description: routine.description,
+                        systemId: system.id,
+                      })
+                    }
+                    delayLongPress={300}>
+                    {({ pressed }) => (
+                      <Card style={[styles.routineCard, pressed && { opacity: 0.6 }]}>
+                        <ThemedText type="smallBold">{routine.name}</ThemedText>
+                        {routine.description ? (
+                          <ThemedText type="small" themeColor="textSecondary">
+                            {routine.description}
+                          </ThemedText>
+                        ) : null}
+                        <ThemedText type="small" themeColor="textSecondary">
+                          {meta}
+                        </ThemedText>
+                      </Card>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          ))
+        : null}
     </View>
   );
 }
@@ -466,6 +474,7 @@ const styles = StyleSheet.create({
   },
   domainName: {
     fontSize: 16,
+    flex: 1,
   },
   system: {
     gap: Spacing.two,

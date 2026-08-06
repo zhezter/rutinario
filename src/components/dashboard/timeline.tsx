@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import type { DailyPlan, DailyPlanItem } from '@/domain/dashboard/types';
-import { TIME_BLOCK_LABELS, TIME_BLOCK_ORDER } from '@/domain/scheduling/anchors';
+import type { TimeBlock } from '@/domain/scheduling/anchors';
 import { useTheme } from '@/hooks/use-theme';
 
 const NODE_COLUMN = 44;
@@ -14,38 +14,23 @@ const SEGMENT_HEIGHT = Spacing.two * 2;
 
 type DailyTimelineProps = {
   plan: DailyPlan;
+  block: TimeBlock;
   onToggle: (item: DailyPlanItem) => void;
 };
 
-export function DailyTimeline({ plan, onToggle }: DailyTimelineProps) {
+export function DailyTimeline({ plan, block, onToggle }: DailyTimelineProps) {
+  const items = plan.items.filter((item) => item.timeBlock === block);
+
   return (
     <View>
-      {TIME_BLOCK_ORDER.map((block) => {
-        const items = plan.items.filter((item) => item.timeBlock === block);
-        if (items.length === 0) return null;
-        return (
-          <View key={block}>
-            <TimelineHeader label={TIME_BLOCK_LABELS[block]} />
-            {items.map((item) => (
-              <TimelineRow key={item.actionId} item={item} onToggle={onToggle} />
-            ))}
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-function TimelineHeader({ label }: { label: string }) {
-  const theme = useTheme();
-  return (
-    <View style={styles.headerRow}>
-      <View style={styles.nodeColumn}>
-        <View style={[styles.headerDot, { backgroundColor: theme.accent }]} />
-      </View>
-      <ThemedText type="smallBold" style={styles.headerLabel}>
-        {label}
-      </ThemedText>
+      {items.map((item, index) => (
+        <TimelineRow
+          key={item.actionId}
+          item={item}
+          onToggle={onToggle}
+          first={index === 0}
+        />
+      ))}
     </View>
   );
 }
@@ -53,9 +38,11 @@ function TimelineHeader({ label }: { label: string }) {
 function TimelineRow({
   item,
   onToggle,
+  first,
 }: {
   item: DailyPlanItem;
   onToggle: (item: DailyPlanItem) => void;
+  first: boolean;
 }) {
   const theme = useTheme();
   const completed = item.completed;
@@ -71,12 +58,14 @@ function TimelineRow({
       onPress={() => onToggle(item)}
       style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}>
       <View style={styles.nodeColumn}>
-        <View
-          style={[
-            styles.segment,
-            { backgroundColor: completed ? theme.success : theme.backgroundSelected },
-          ]}
-        />
+        {!first && (
+          <View
+            style={[
+              styles.segment,
+              { backgroundColor: completed ? theme.success : theme.backgroundSelected },
+            ]}
+          />
+        )}
         <View
           style={[
             styles.circle,
@@ -116,30 +105,15 @@ function TimelineRow({
 }
 
 const styles = StyleSheet.create({
-  headerRow: {
+  row: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: Spacing.three,
-    paddingBottom: Spacing.two,
+    alignItems: 'flex-start',
+    paddingVertical: Spacing.two,
   },
   nodeColumn: {
     width: NODE_COLUMN,
     alignItems: 'center',
     position: 'relative',
-  },
-  headerDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  headerLabel: {
-    fontSize: 13,
-    letterSpacing: 0.5,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: Spacing.two,
   },
   segment: {
     position: 'absolute',

@@ -133,12 +133,7 @@ export const inventoryItems = sqliteTable('inventory_items', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
   category: text('category').notNull(),
-  usedInActionId: integer('used_in_action_id').references(() => actions.id, {
-    onDelete: 'set null',
-  }),
-  amountRemaining: integer('amount_remaining').notNull().default(100),
-  replacementIntervalDays: integer('replacement_interval_days'),
-  lastReplacedAt: text('last_replaced_at'),
+  lowStock: integer('low_stock').notNull().default(0),
   notes: text('notes'),
   createdAt: integer('created_at')
     .notNull()
@@ -184,19 +179,11 @@ export const actionsRelations = relations(actions, ({ one, many }) => ({
     references: [procedures.id],
   }),
   completions: many(completions),
-  inventoryItems: many(inventoryItems),
 }));
 
 export const completionsRelations = relations(completions, ({ one }) => ({
   action: one(actions, {
     fields: [completions.actionId],
-    references: [actions.id],
-  }),
-}));
-
-export const inventoryItemsRelations = relations(inventoryItems, ({ one }) => ({
-  usedInAction: one(actions, {
-    fields: [inventoryItems.usedInActionId],
     references: [actions.id],
   }),
 }));

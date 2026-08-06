@@ -408,31 +408,27 @@ export async function seedDatabase() {
   const inventorySeed: {
     name: string;
     category: string;
-    usedInActionKey: string;
-    amountRemaining: number;
-    replacementIntervalDays?: number;
+    lowStock?: boolean;
   }[] = [
-    { name: 'Cleanser', category: 'Face', usedInActionKey: 'am-skin/cleanse/apply', amountRemaining: 30, replacementIntervalDays: 90 },
-    { name: 'Moisturizer', category: 'Face', usedInActionKey: 'am-skin/moisturize/apply', amountRemaining: 55, replacementIntervalDays: 90 },
-    { name: 'Sunscreen', category: 'Face', usedInActionKey: 'am-skin/sunscreen/apply', amountRemaining: 15, replacementIntervalDays: 30 },
-    { name: 'Treatment', category: 'Face', usedInActionKey: 'pm-skin/treatment/apply', amountRemaining: 70, replacementIntervalDays: 60 },
-    { name: 'Eye cream', category: 'Face', usedInActionKey: 'pm-skin/eye/apply', amountRemaining: 80, replacementIntervalDays: 120 },
-    { name: 'Shampoo', category: 'Hair', usedInActionKey: 'hair/wash', amountRemaining: 40, replacementIntervalDays: 45 },
-    { name: 'Conditioner', category: 'Hair', usedInActionKey: 'hair/wash', amountRemaining: 40, replacementIntervalDays: 45 },
-    { name: 'Soap', category: 'Body', usedInActionKey: 'body/shower', amountRemaining: 25, replacementIntervalDays: 30 },
-    { name: 'Body moisturizer', category: 'Body', usedInActionKey: 'body/moisturize', amountRemaining: 60, replacementIntervalDays: 90 },
-    { name: 'Toothbrush', category: 'Oral', usedInActionKey: 'am-oral/brush', amountRemaining: 90, replacementIntervalDays: 90 },
-    { name: 'Toothpaste', category: 'Oral', usedInActionKey: 'am-oral/brush', amountRemaining: 20, replacementIntervalDays: 60 },
-    { name: 'Floss', category: 'Oral', usedInActionKey: 'am-oral/floss', amountRemaining: 50, replacementIntervalDays: 60 },
+    { name: 'Cleanser', category: 'Face' },
+    { name: 'Moisturizer', category: 'Face' },
+    { name: 'Sunscreen', category: 'Face', lowStock: true },
+    { name: 'Treatment', category: 'Face' },
+    { name: 'Eye cream', category: 'Face' },
+    { name: 'Shampoo', category: 'Hair' },
+    { name: 'Conditioner', category: 'Hair' },
+    { name: 'Soap', category: 'Body', lowStock: true },
+    { name: 'Body moisturizer', category: 'Body' },
+    { name: 'Toothbrush', category: 'Oral' },
+    { name: 'Toothpaste', category: 'Oral', lowStock: true },
+    { name: 'Floss', category: 'Oral' },
   ];
 
   for (const item of inventorySeed) {
     await db.insert(inventoryItems).values({
       name: item.name,
       category: item.category,
-      usedInActionId: actionIds.get(item.usedInActionKey),
-      amountRemaining: item.amountRemaining,
-      replacementIntervalDays: item.replacementIntervalDays,
+      lowStock: item.lowStock ? 1 : 0,
     });
   }
 

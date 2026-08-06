@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { inventoryItems } from '@/db/schema';
@@ -6,9 +6,7 @@ import { inventoryItems } from '@/db/schema';
 export type InventoryInput = {
   name: string;
   category: string;
-  amountRemaining: number;
-  replacementIntervalDays: number | null;
-  usedInActionId: number | null;
+  notes?: string | null;
 };
 
 export async function createInventoryItem(input: InventoryInput) {
@@ -23,12 +21,25 @@ export async function deleteInventoryItem(id: number) {
   return db.delete(inventoryItems).where(eq(inventoryItems.id, id));
 }
 
+export async function setLowStock(id: number, low: boolean) {
+  return db
+    .update(inventoryItems)
+    .set({ lowStock: low ? 1 : 0 })
+    .where(eq(inventoryItems.id, id));
+}
+
+export async function finishShopping(itemIds: number[]) {
+  if (itemIds.length === 0) return;
+  await db
+    .update(inventoryItems)
+    .set({ lowStock: 0 })
+    .where(inArray(inventoryItems.id, itemIds));
+}
+
 function normalize(input: InventoryInput) {
   return {
     name: input.name.trim(),
     category: input.category.trim(),
-    amountRemaining: Math.max(0, Math.min(100, input.amountRemaining)),
-    replacementIntervalDays: input.replacementIntervalDays,
-    usedInActionId: input.usedInActionId,
+    notes: input.notes?.trim() || null,
   };
 }

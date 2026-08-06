@@ -80,3 +80,10 @@ export const TIME_BLOCK_LABELS: Record<TimeBlock, string> = {
   night: 'Night',
   flexible: 'Flexible',
 };
+
+export function timeBlockFromDate(date: Date): Exclude<TimeBlock, 'flexible'> {
+  const hour = date.getHours();
+  if (hour < 12) return 'morning';
+  if (hour < 19) return 'afternoon';
+  return 'night';
+}

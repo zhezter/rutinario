@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ProgressBar } from '@/components/dashboard/progress-bar';
 import { InventoryFormSheet } from '@/components/forms/inventory-form';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -14,24 +14,22 @@ import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import {
   createInventoryItem,
   deleteInventoryItem,
+  setLowStock,
   updateInventoryItem,
   type InventoryInput,
 } from '@/domain/crud/inventory';
-import { useActionOptions } from '@/hooks/useActionOptions';
-import { isLowStock, useInventory, type InventoryRow } from '@/hooks/useInventory';
+import { useInventory, type InventoryRow } from '@/hooks/useInventory';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function InventoryScreen() {
   const items = useInventory();
-  const actionOptions = useActionOptions();
   const theme = useTheme();
 
-  const [form, setForm] = useState<{
-    initial?: Partial<InventoryInput> & { usedInActionId?: number | null };
-    itemId?: number;
-  } | null>(null);
+  const [form, setForm] = useState<{ initial?: Partial<InventoryInput>; itemId?: number } | null>(null);
   const [menuTarget, setMenuTarget] = useState<InventoryRow | null>(null);
   const [confirm, setConfirm] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
+
+  const lowCount = items.filter((item) => item.lowStock === 1).length;
 
   const groups = new Map<string, InventoryRow[]>();
   for (const item of items) {
@@ -51,12 +49,20 @@ export default function InventoryScreen() {
               initial: {
                 name: menuTarget.name,
                 category: menuTarget.category,
-                amountRemaining: menuTarget.amountRemaining,
-                replacementIntervalDays: menuTarget.replacementIntervalDays,
-                usedInActionId: menuTarget.usedInAction?.id ?? null,
               },
             }),
         },
+        menuTarget.lowStock === 1
+          ? {
+              label: 'Restocked',
+              icon: 'checkmark-circle-outline',
+              onPress: () => void setLowStock(menuTarget.id, false),
+            }
+          : {
+              label: 'Mark low stock',
+              icon: 'alert-circle-outline',
+              onPress: () => void setLowStock(menuTarget.id, true),
+            },
         {
           label: 'Delete',
           icon: 'trash-outline',
@@ -85,13 +91,44 @@ export default function InventoryScreen() {
                 Inventory
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                What you use, and when to restock
+                Track products and plan your next shop
               </ThemedText>
             </View>
-            <Pressable onPress={() => setForm({})} hitSlop={8} style={styles.headerButton}>
-              <Ionicons name="add" size={26} color={theme.accent} />
-            </Pressable>
+            <View style={styles.headerButtons}>
+              <Pressable
+                onPress={() => router.push('/shopping')}
+                hitSlop={8}
+                style={styles.headerButton}>
+                <View>
+                  <Ionicons name="cart-outline" size={24} color={theme.text} />
+                  {lowCount > 0 ? (
+                    <View style={[styles.badge, { backgroundColor: theme.warning }]}>
+                      <ThemedText style={styles.badgeText}>{lowCount}</ThemedText>
+                    </View>
+                  ) : null}
+                </View>
+              </Pressable>
+              <Pressable onPress={() => setForm({})} hitSlop={8} style={styles.headerButton}>
+                <Ionicons name="add" size={26} color={theme.accent} />
+              </Pressable>
+            </View>
           </View>
+
+          {lowCount > 0 ? (
+            <Pressable
+              onPress={() => router.push('/shopping')}
+              style={({ pressed }) => [
+                styles.shoppingBanner,
+                { backgroundColor: theme.backgroundSelected },
+                pressed && { opacity: 0.7 },
+              ]}>
+              <Ionicons name="cart-outline" size={20} color={theme.warning} />
+              <ThemedText type="smallBold" style={styles.shoppingBannerText}>
+                Shopping list · {lowCount} {lowCount === 1 ? 'item' : 'items'} low on stock
+              </ThemedText>
+              <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+            </Pressable>
+          ) : null}
 
           {[...groups.entries()].map(([category, group]) => (
             <View key={category} style={styles.group}>
@@ -104,7 +141,13 @@ export default function InventoryScreen() {
                   onLongPress={() => setMenuTarget(item)}
                   delayLongPress={300}>
                   {({ pressed }) => (
-                    <InventoryCard item={item} pressed={pressed} />
+                    <InventoryCard
+                      item={item}
+                      pressed={pressed}
+                      onToggleLowStock={() =>
+                        void setLowStock(item.id, item.lowStock === 0)
+                      }
+                    />
                   )}
                 </Pressable>
               ))}
@@ -130,7 +173,6 @@ export default function InventoryScreen() {
         <InventoryFormSheet
           title={form.itemId ? 'Edit product' : 'New product'}
           initial={form.initial}
-          actionOptions={actionOptions}
           onSubmit={async (input) => {
             if (form.itemId) {
               await updateInventoryItem(form.itemId, input);
@@ -159,33 +201,42 @@ export default function InventoryScreen() {
   );
 }
 
-function InventoryCard({ item, pressed }: { item: InventoryRow; pressed: boolean }) {
+function InventoryCard({
+  item,
+  pressed,
+  onToggleLowStock,
+}: {
+  item: InventoryRow;
+  pressed: boolean;
+  onToggleLowStock: () => void;
+}) {
   const theme = useTheme();
-  const low = isLowStock(item);
+  const low = item.lowStock === 1;
 
   return (
     <Card style={pressed ? styles.pressed : undefined}>
       <View style={styles.row}>
         <View style={styles.nameBlock}>
           <ThemedText type="smallBold">{item.name}</ThemedText>
-          {item.usedInAction ? (
-            <ThemedText type="small" themeColor="textSecondary">
-              For {item.usedInAction.name}
-            </ThemedText>
-          ) : null}
+          <ThemedText type="small" themeColor="textSecondary">
+            {item.category}
+          </ThemedText>
         </View>
-        <ThemedText type="small" themeColor="textSecondary">
-          {item.amountRemaining}% left
-        </ThemedText>
+        <Pressable
+          onPress={onToggleLowStock}
+          hitSlop={8}
+          style={({ pressed }) => [
+            styles.statusPill,
+            { backgroundColor: low ? theme.warning : theme.backgroundSelected },
+            pressed && { opacity: 0.7 },
+          ]}>
+          <ThemedText
+            type="smallBold"
+            style={{ color: low ? '#FFFFFF' : theme.textSecondary }}>
+            {low ? 'Low stock' : 'In stock'}
+          </ThemedText>
+        </Pressable>
       </View>
-
-      <ProgressBar completed={item.amountRemaining} total={100} />
-
-      {low ? (
-        <ThemedText type="small" style={{ color: theme.warning }}>
-          Running low — restock soon
-        </ThemedText>
-      ) : null}
     </Card>
   );
 }
@@ -220,8 +271,39 @@ const styles = StyleSheet.create({
     fontSize: 32,
     lineHeight: 38,
   },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
   headerButton: {
     padding: Spacing.one,
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: 700,
+  },
+  shoppingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    borderRadius: Spacing.three,
+    padding: Spacing.three,
+  },
+  shoppingBannerText: {
+    flex: 1,
   },
   group: {
     gap: Spacing.two,
@@ -241,5 +323,10 @@ const styles = StyleSheet.create({
   nameBlock: {
     flex: 1,
     gap: 1,
+  },
+  statusPill: {
+    borderRadius: Spacing.two,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
   },
 });

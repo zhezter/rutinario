@@ -1,6 +1,7 @@
+import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
-import { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { AppState, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ChecklistItem } from '@/components/dashboard/checklist-item';
@@ -10,41 +11,58 @@ import { DailyTimeline } from '@/components/dashboard/timeline';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Card } from '@/components/ui/card';
-import { PillGroup } from '@/components/ui/pill-group';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { formatMinutes } from '@/domain/dashboard/buildDailyPlan';
 import { greetingFor, progressMessage } from '@/domain/dashboard/copy';
 import { toggleCompletion } from '@/domain/dashboard/completions';
-import type { CategoryProgress, DailyPlan, DailyPlanItem } from '@/domain/dashboard/types';
-import { TIME_BLOCK_LABELS, TIME_BLOCK_ORDER } from '@/domain/scheduling/anchors';
+import type { DailyPlan, DailyPlanItem } from '@/domain/dashboard/types';
+import {
+  TIME_BLOCK_LABELS,
+  timeBlockFromDate,
+  type TimeBlock,
+} from '@/domain/scheduling/anchors';
 import { useDailyPlan } from '@/hooks/useDailyPlan';
 import { useTheme } from '@/hooks/use-theme';
-import { domainColor } from '@/lib/domainColor';
 import { useUIStore, type TodayView } from '@/stores/uiStore';
+import { dateKey } from '@/lib/dates';
 
-const VIEW_OPTIONS = ['list', 'timeline'] as const;
-const VIEW_LABELS: Record<(typeof VIEW_OPTIONS)[number], string> = {
-  list: 'List',
-  timeline: 'Timeline',
-};
+const BLOCK_OPTIONS: TimeBlock[] = ['morning', 'afternoon', 'night'];
 
 export default function TodayScreen() {
-  const [today] = useState(() => new Date());
+  const [today, setToday] = useState(() => new Date());
+  const [selectedBlock, setSelectedBlock] = useState<TimeBlock>(() => timeBlockFromDate(today));
   const plan = useDailyPlan(today);
   const activeLevel = useUIStore((state) => state.activeLevel);
   const setActiveLevel = useUIStore((state) => state.setActiveLevel);
   const todayView = useUIStore((state) => state.todayView);
   const setTodayView = useUIStore((state) => state.setTodayView);
 
-  const handleViewChange = (view: TodayView) => {
-    setTodayView(view);
-  };
+  useEffect(() => {
+    const refresh = () => {
+      const now = new Date();
+      if (dateKey(now) !== dateKey(today)) {
+        setToday(now);
+        setSelectedBlock(timeBlockFromDate(now));
+      }
+    };
+    const interval = setInterval(refresh, 30_000);
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refresh();
+    });
+    return () => {
+      clearInterval(interval);
+      appState.remove();
+    };
+  }, [today]);
 
   const handleToggle = (item: DailyPlanItem) => {
     void toggleCompletion(item.actionId, today, item.completed);
   };
 
   const dateLabel = format(today, 'EEEE, MMMM d');
+
+  const blockItems = plan?.items.filter((item) => item.timeBlock === selectedBlock) ?? [];
+  const flexibleItems = plan?.items.filter((item) => item.timeBlock === 'flexible') ?? [];
 
   return (
     <ThemedView style={styles.container}>
@@ -68,48 +86,43 @@ export default function TodayScreen() {
             <>
               <PlanHero plan={plan} />
 
-              <View style={styles.section}>
-                <View style={styles.planHeader}>
-                  <SectionTitle>{"Today's plan"}</SectionTitle>
-                  <PillGroup
-                    options={VIEW_OPTIONS}
-                    value={todayView}
-                    onChange={handleViewChange}
-                    labels={VIEW_LABELS}
-                  />
-                </View>
+              <BlockSelector value={selectedBlock} onChange={setSelectedBlock} />
 
-                {plan.items.length === 0 ? (
-                  <ThemedText type="small" themeColor="textSecondary">
-                    Nothing planned for today. Enjoy the day.
-                  </ThemedText>
-                ) : todayView === 'timeline' ? (
-                  <DailyTimeline plan={plan} onToggle={handleToggle} />
+              <ViewToggle value={todayView} onChange={setTodayView} />
+
+              {todayView === 'timeline' ? (
+                blockItems.length > 0 ? (
+                  <DailyTimeline plan={plan} block={selectedBlock} onToggle={handleToggle} />
                 ) : (
-                  <>
-                    <Card style={styles.categoriesCard}>
-                      {plan.categories.map((category) => (
-                        <CategoryRow key={category.domainName} category={category} />
-                      ))}
-                    </Card>
+                  <EmptyBlock block={selectedBlock} />
+                )
+              ) : (
+                <>
+                  {flexibleItems.length > 0 ? (
+                    <View style={styles.section}>
+                      <SectionTitle>Anytime</SectionTitle>
+                      <Card>
+                        {flexibleItems.map((item) => (
+                          <ChecklistItem key={item.actionId} item={item} onToggle={handleToggle} />
+                        ))}
+                      </Card>
+                    </View>
+                  ) : null}
 
-                    {TIME_BLOCK_ORDER.map((block) => {
-                      const items = plan.items.filter((item) => item.timeBlock === block);
-                      if (items.length === 0) return null;
-                      return (
-                        <View key={block} style={styles.section}>
-                          <SectionTitle>{TIME_BLOCK_LABELS[block]}</SectionTitle>
-                          <Card>
-                            {items.map((item) => (
-                              <ChecklistItem key={item.actionId} item={item} onToggle={handleToggle} />
-                            ))}
-                          </Card>
-                        </View>
-                      );
-                    })}
-                  </>
-                )}
-              </View>
+                  {blockItems.length > 0 ? (
+                    <View style={styles.section}>
+                      <SectionTitle>{TIME_BLOCK_LABELS[selectedBlock]}</SectionTitle>
+                      <Card>
+                        {blockItems.map((item) => (
+                          <ChecklistItem key={item.actionId} item={item} onToggle={handleToggle} />
+                        ))}
+                      </Card>
+                    </View>
+                  ) : (
+                    <EmptyBlock block={selectedBlock} />
+                  )}
+                </>
+              )}
             </>
           ) : (
             <ThemedText type="small" themeColor="textSecondary">
@@ -119,6 +132,77 @@ export default function TodayScreen() {
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
+  );
+}
+
+function BlockSelector({ value, onChange }: { value: TimeBlock; onChange: (block: TimeBlock) => void }) {
+  const theme = useTheme();
+
+  return (
+    <View style={styles.blockSelector}>
+      {BLOCK_OPTIONS.map((block) => {
+        const selected = block === value;
+        return (
+          <Pressable
+            key={block}
+            onPress={() => onChange(block)}
+            style={({ pressed }) => [
+              styles.blockPill,
+              {
+                backgroundColor: selected ? theme.accent : theme.backgroundSelected,
+                opacity: pressed && !selected ? 0.7 : 1,
+              },
+            ]}>
+            <ThemedText
+              type="smallBold"
+              style={{ color: selected ? theme.background : theme.text }}>
+              {TIME_BLOCK_LABELS[block]}
+            </ThemedText>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function EmptyBlock({ block }: { block: TimeBlock }) {
+  return (
+    <Card>
+      <ThemedText type="small" themeColor="textSecondary">
+        Nothing scheduled for {TIME_BLOCK_LABELS[block]}. Enjoy the time.
+      </ThemedText>
+    </Card>
+  );
+}
+
+function ViewToggle({
+  value,
+  onChange,
+}: {
+  value: TodayView;
+  onChange: (view: TodayView) => void;
+}) {
+  const theme = useTheme();
+  const isList = value === 'list';
+
+  return (
+    <Pressable
+      onPress={() => onChange(isList ? 'timeline' : 'list')}
+      style={({ pressed }) => [
+        styles.viewButton,
+        { backgroundColor: theme.backgroundSelected },
+        pressed && { opacity: 0.7 },
+      ]}>
+      <Ionicons
+        name={isList ? 'time-outline' : 'list-outline'}
+        size={18}
+        color={theme.text}
+      />
+      <ThemedText type="smallBold" style={styles.viewButtonLabel}>
+        {isList ? 'Timeline' : 'List'}
+      </ThemedText>
+      <Ionicons name="swap-horizontal" size={16} color={theme.textSecondary} />
+    </Pressable>
   );
 }
 
@@ -156,23 +240,6 @@ function PlanHero({ plan }: { plan: DailyPlan }) {
         {progressMessage(completed, total)}
       </ThemedText>
     </Card>
-  );
-}
-
-function CategoryRow({ category }: { category: CategoryProgress }) {
-  return (
-    <View style={styles.categoryRow}>
-      <View style={styles.categoryNameRow}>
-        <View style={[styles.categoryDot, { backgroundColor: domainColor(category.domainName) }]} />
-        <ThemedText type="smallBold" style={styles.categoryName}>
-          {category.domainName}
-        </ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          {category.completed}/{category.total}
-        </ThemedText>
-      </View>
-      <ProgressBar completed={category.completed} total={category.total} />
-    </View>
   );
 }
 
@@ -217,15 +284,30 @@ const styles = StyleSheet.create({
   section: {
     gap: Spacing.two,
   },
-  planHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.two,
-    marginTop: Spacing.two,
-  },
   sectionTitle: {
     marginTop: Spacing.two,
+  },
+  blockSelector: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  blockPill: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: Spacing.two,
+    borderRadius: Spacing.three,
+  },
+  viewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.three,
+    borderRadius: Spacing.three,
+  },
+  viewButtonLabel: {
+    flex: 1,
+    textTransform: 'capitalize',
   },
   hero: {
     gap: Spacing.two,
@@ -242,24 +324,5 @@ const styles = StyleSheet.create({
   },
   heroTime: {
     marginBottom: 4,
-  },
-  categoriesCard: {
-    gap: Spacing.three,
-  },
-  categoryRow: {
-    gap: Spacing.one,
-  },
-  categoryNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-  },
-  categoryDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  categoryName: {
-    flex: 1,
   },
 });
