@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { addDays, format, subDays } from 'date-fns';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppState, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -14,6 +14,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { GhostButton, PrimaryButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { ConfirmSheet } from '@/components/ui/prompt';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { formatMinutes } from '@/domain/dashboard/buildDailyPlan';
 import { greetingFor, progressMessage } from '@/domain/dashboard/copy';
@@ -40,11 +41,18 @@ import { hapticSelection, hapticSuccess } from '@/lib/haptics';
 
 const BLOCK_OPTIONS: TimeBlock[] = ['morning', 'afternoon', 'night'];
 
+const LEVEL_LABELS: Record<ActiveLevel, string> = {
+  minimum: 'Minimal',
+  standard: 'Standard',
+  full: 'Full',
+};
+
 export default function TodayScreen() {
   const [today, setToday] = useState(() => new Date());
   const [viewDate, setViewDate] = useState<Date>(() => new Date());
   const [selectedBlock, setSelectedBlock] = useState<TimeBlock>(() => timeBlockFromDate(today));
   const [showEnergyCheckIn, setShowEnergyCheckIn] = useState(false);
+  const [levelConfirm, setLevelConfirm] = useState<ActiveLevel | null>(null);
   const plan = useDailyPlan(viewDate);
   const { closedAt } = useDayClosure(dateKey(viewDate));
   const theme = useTheme();
@@ -74,28 +82,50 @@ export default function TodayScreen() {
 
   const isViewingToday = dateKey(viewDate) === dateKey(today);
 
+  const planRef = useRef(plan);
+  planRef.current = plan;
+
   useEffect(() => {
-    if (!isViewingToday || !plan || plan.items.length === 0) return;
+    void (async () => {
+      const storedLevel = await getStoredEnergyLevel();
+      if (storedLevel) setActiveLevel(storedLevel);
+    })();
+  }, [setActiveLevel]);
+
+  useEffect(() => {
+    if (!isViewingToday) return;
     let cancelled = false;
     void (async () => {
-      const [storedDate, storedLevel] = await Promise.all([
-        getEnergyCheckinDate(),
-        getStoredEnergyLevel(),
-      ]);
+      const storedDate = await getEnergyCheckinDate();
       if (cancelled) return;
-      if (storedLevel) setActiveLevel(storedLevel);
-      if (storedDate !== dateKey(today)) setShowEnergyCheckIn(true);
+      const currentPlan = planRef.current;
+      if (storedDate !== dateKey(today) && currentPlan && currentPlan.items.length > 0) {
+        setShowEnergyCheckIn(true);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [isViewingToday, plan, today, setActiveLevel]);
+  }, [isViewingToday, today]);
 
   const handleEnergySelect = (level: ActiveLevel) => {
     hapticSuccess();
     setActiveLevel(level);
     setShowEnergyCheckIn(false);
     void saveEnergyCheckin(level, dateKey(today));
+  };
+
+  const handleLevelRequested = (level: ActiveLevel) => {
+    if (level === activeLevel) return;
+    hapticSelection();
+    setLevelConfirm(level);
+  };
+
+  const handleLevelConfirmed = () => {
+    if (!levelConfirm) return;
+    hapticSuccess();
+    setActiveLevel(levelConfirm);
+    setLevelConfirm(null);
   };
 
   const goToPrevDay = () => setViewDate((prev) => subDays(prev, 1));
@@ -163,7 +193,7 @@ export default function TodayScreen() {
                 <DateChevron icon="chevron-forward" onPress={goToNextDay} disabled={isViewingToday} />
               </View>
             </View>
-            <LevelToggle value={activeLevel} onChange={setActiveLevel} />
+            <LevelToggle value={activeLevel} onChange={handleLevelRequested} />
           </View>
 
           {plan ? (
@@ -269,6 +299,15 @@ export default function TodayScreen() {
         visible={showEnergyCheckIn}
         onSelect={handleEnergySelect}
         onClose={() => setShowEnergyCheckIn(false)}
+      />
+
+      <ConfirmSheet
+        visible={levelConfirm !== null}
+        title="Switch intensity?"
+        message={`Switch to ${levelConfirm ? LEVEL_LABELS[levelConfirm] : ''}? This shows or hides the steps marked below that intensity.`}
+        confirmLabel="Switch"
+        onConfirm={handleLevelConfirmed}
+        onClose={() => setLevelConfirm(null)}
       />
     </ThemedView>
   );
