@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -110,6 +111,7 @@ export default function WorkoutDetailScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <SafeAreaView edges={['top']} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={8} style={styles.headerButton}>
@@ -229,6 +231,7 @@ export default function WorkoutDetailScreen() {
           <ThemedText type="smallBold">Add day</ThemedText>
         </Pressable>
       </ScrollView>
+      </SafeAreaView>
 
       <ActionSheet
         visible={menuTarget !== null}
@@ -284,6 +287,9 @@ export default function WorkoutDetailScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  safeArea: {
     flex: 1,
   },
   scroll: {

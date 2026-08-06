@@ -15,6 +15,7 @@ import { ThemedView } from '@/components/themed-view';
 import { GhostButton, PrimaryButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ConfirmSheet } from '@/components/ui/prompt';
+import { Sheet } from '@/components/ui/sheet';
 import { WorkoutTodayCard } from '@/components/workout/workout-today-card';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { formatMinutes } from '@/domain/dashboard/buildDailyPlan';
@@ -197,6 +198,8 @@ export default function TodayScreen() {
             <LevelToggle value={activeLevel} onChange={handleLevelRequested} />
           </View>
 
+          <DayNoteEntry date={dateKey(viewDate)} label={format(viewDate, 'EEEE, MMMM d')} />
+
           {plan ? (
             <>
               <PlanHero plan={plan} doneLabel={isViewingToday ? 'done today' : 'done'} />
@@ -293,8 +296,6 @@ export default function TodayScreen() {
           )}
 
           {isViewingToday ? <WorkoutTodayCard /> : null}
-
-          <DayNoteCard date={dateKey(viewDate)} />
         </ScrollView>
       </SafeAreaView>
 
@@ -458,21 +459,43 @@ function SectionTitle({ children }: { children: string }) {
   );
 }
 
-function DayNoteCard({ date }: { date: string }) {
+function DayNoteEntry({ date, label }: { date: string; label: string }) {
   const theme = useTheme();
+  const [open, setOpen] = useState(false);
   const { note, changeNote, dirty, save } = useDayNote(date);
+  const hasNote = note.trim().length > 0;
 
   return (
-    <View style={styles.section}>
-      <SectionTitle>Day note</SectionTitle>
-      <Card style={styles.noteCard}>
+    <>
+      <View style={styles.noteEntryRow}>
+        <Pressable
+          onPress={() => setOpen(true)}
+          style={({ pressed }) => [
+            styles.noteButton,
+            { backgroundColor: theme.accent, opacity: pressed ? 0.7 : 1 },
+          ]}>
+          <Ionicons name={hasNote ? 'pencil-outline' : 'add'} size={16} color={theme.background} />
+          <ThemedText type="smallBold" style={{ color: theme.background }}>
+            {hasNote ? 'Daily note' : 'Add daily note'}
+          </ThemedText>
+        </Pressable>
+      </View>
+
+      <Sheet
+        visible={open}
+        title="Daily note"
+        onClose={() => {
+          if (dirty) void save();
+          setOpen(false);
+        }}>
+        <ThemedText type="small" themeColor="textSecondary">
+          {label}
+        </ThemedText>
         <TextInput
           value={note}
           onChangeText={changeNote}
-          onBlur={() => {
-            if (dirty) void save();
-          }}
           multiline
+          autoFocus
           placeholder="How was this day? Mood, energy, wins, anything on your mind…"
           placeholderTextColor={theme.textSecondary}
           style={[
@@ -480,13 +503,11 @@ function DayNoteCard({ date }: { date: string }) {
             { backgroundColor: theme.backgroundSelected, color: theme.text },
           ]}
         />
-        {dirty ? (
-          <View style={styles.noteFooter}>
-            <GhostButton label="Save note" onPress={() => void save()} />
-          </View>
-        ) : null}
-      </Card>
-    </View>
+        <View style={styles.noteFooter}>
+          <GhostButton label="Save note" onPress={() => void save()} />
+        </View>
+      </Sheet>
+    </>
   );
 }
 
@@ -537,7 +558,8 @@ function CloseDayCard({
         {pending.length > 0 ? (
           <>
             <ThemedText type="small" themeColor="textSecondary">
-              Still pending: {pending.map((item) => item.name).join(', ')}
+              Still pending: {pending.slice(0, 3).map((item) => item.name).join(', ')}
+              {pending.length > 3 ? ` +${pending.length - 3} more` : ''}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
               Closing isn&apos;t skipping — it&apos;s deciding. Wrap up, then close.
@@ -661,8 +683,16 @@ const styles = StyleSheet.create({
   heroTime: {
     marginBottom: 4,
   },
-  noteCard: {
-    gap: Spacing.two,
+  noteEntryRow: {
+    flexDirection: 'row',
+  },
+  noteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: Spacing.four,
   },
   noteInput: {
     minHeight: 72,
