@@ -1,11 +1,13 @@
 import * as Notifications from 'expo-notifications';
 import { and, eq, isNotNull } from 'drizzle-orm';
+import { Platform } from 'react-native';
 
 import { db } from '@/db/client';
 import { actions, appSettings, procedures, routines } from '@/db/schema';
 
 const REMINDER_PREFIX = 'reminder-';
 const REMINDERS_ENABLED_KEY = 'reminders_enabled';
+const ANDROID_CHANNEL_ID = 'reminders';
 
 export type ReminderTarget = {
   actionId: number;
@@ -43,6 +45,13 @@ export async function setRemindersEnabled(enabled: boolean): Promise<void> {
 }
 
 export async function requestReminderPermission(): Promise<boolean> {
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
+      name: 'Reminders',
+      importance: Notifications.AndroidImportance.HIGH,
+      sound: 'default',
+    });
+  }
   const current = await Notifications.getPermissionsAsync();
   if (current.granted) return true;
   const requested = await Notifications.requestPermissionsAsync();
@@ -99,6 +108,7 @@ export async function syncReminders(): Promise<void> {
         type: Notifications.SchedulableTriggerInputTypes.DAILY,
         hour,
         minute,
+        channelId: ANDROID_CHANNEL_ID,
       },
     });
   }

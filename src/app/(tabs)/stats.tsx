@@ -1,7 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { addDays, subDays } from 'date-fns';
+import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ProgressBar } from '@/components/dashboard/progress-bar';
@@ -13,6 +14,7 @@ import {
   getStatsSnapshot,
   type CalendarDay,
   type DomainStat,
+  type RoutineTrendStat,
   type StatsSnapshot,
 } from '@/domain/dashboard/stats';
 import { useLiveTables } from '@/hooks/useLiveTables';
@@ -46,6 +48,20 @@ export default function StatsScreen() {
           <ThemedText type="title" style={styles.title}>
             Stats
           </ThemedText>
+
+          <Pressable
+            onPress={() => router.push('/review')}
+            style={({ pressed }) => [
+              styles.reviewButton,
+              { backgroundColor: theme.backgroundSelected },
+              pressed && { opacity: 0.7 },
+            ]}>
+            <Ionicons name="calendar-outline" size={18} color={theme.accent} />
+            <ThemedText type="smallBold" style={styles.reviewButtonLabel}>
+              Weekly review
+            </ThemedText>
+            <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
+          </Pressable>
 
           {stats ? (
             <>
@@ -116,6 +132,40 @@ export default function StatsScreen() {
                     stats.domains.map((domain) => (
                       <DomainRow key={domain.name} domain={domain} />
                     ))
+                  )}
+                </Card>
+              </View>
+
+              <View style={styles.section}>
+                <SectionTitle>Routines — last 8 weeks</SectionTitle>
+                <Card style={styles.domainsCard}>
+                  {stats.routineTrend.length === 0 ? (
+                    <ThemedText type="small" themeColor="textSecondary">
+                      No routines with daily tasks yet.
+                    </ThemedText>
+                  ) : (
+                    <>
+                      {stats.routineTrend.map((routine) => (
+                        <RoutineTrendRow key={routine.routineId} routine={routine} />
+                      ))}
+                      <View style={styles.legendRow}>
+                        <ThemedText type="small" themeColor="textSecondary">
+                          Less
+                        </ThemedText>
+                        {[0, 25, 50, 75, 100].map((pct) => (
+                          <View
+                            key={pct}
+                            style={[
+                              styles.legendCell,
+                              { backgroundColor: heatColor(pct, theme.accent, theme.backgroundSelected) },
+                            ]}
+                          />
+                        ))}
+                        <ThemedText type="small" themeColor="textSecondary">
+                          More
+                        </ThemedText>
+                      </View>
+                    </>
                   )}
                 </Card>
               </View>
@@ -255,6 +305,38 @@ function accentWithOpacity(hex: string, opacity: number): string {
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 }
 
+function RoutineTrendRow({ routine }: { routine: RoutineTrendStat }) {
+  const theme = useTheme();
+  return (
+    <View style={styles.trendRow}>
+      <View style={styles.trendNameRow}>
+        <View style={[styles.domainDot, { backgroundColor: domainColor(routine.domainName) }]} />
+        <ThemedText type="smallBold" style={styles.domainName} numberOfLines={1}>
+          {routine.routineName}
+        </ThemedText>
+      </View>
+      <View style={styles.trendWeeks}>
+        {routine.weeks.map((pct, index) => (
+          <View
+            key={index}
+            style={[
+              styles.trendCell,
+              {
+                backgroundColor:
+                  pct === null
+                    ? 'transparent'
+                    : heatColor(pct, theme.accent, theme.backgroundSelected),
+                borderWidth: pct === null ? 1 : 0,
+                borderColor: theme.backgroundSelected,
+              },
+            ]}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function DomainRow({ domain }: { domain: DomainStat }) {
   return (
     <View style={styles.domainRow}>
@@ -366,6 +448,38 @@ const styles = StyleSheet.create({
   },
   domainName: {
     flex: 1,
+  },
+  reviewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.three,
+    borderRadius: Spacing.three,
+  },
+  reviewButtonLabel: {
+    flex: 1,
+  },
+  trendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  trendNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    width: '45%',
+  },
+  trendWeeks: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 4,
+  },
+  trendCell: {
+    flex: 1,
+    aspectRatio: 1,
+    borderRadius: 3,
   },
   heatmap: {
     gap: Spacing.two,

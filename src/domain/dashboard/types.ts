@@ -13,6 +13,7 @@ export type ActionRow = {
   name: string;
   description: string | null;
   durationMin: number | null;
+  createdAt: number;
   scheduleType: ScheduleType;
   fixedTime: string | null;
   anchorType: AnchorType | null;

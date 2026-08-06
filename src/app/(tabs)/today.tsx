@@ -73,6 +73,10 @@ export default function TodayScreen() {
     void toggleCompletion(item.actionId, viewDate, item.completed);
   };
 
+  const missedCount = isViewingToday
+    ? 0
+    : (plan?.items.filter((item) => !item.completed).length ?? 0);
+
   const blockItems = plan?.items.filter((item) => item.timeBlock === selectedBlock) ?? [];
   const flexibleItems = plan?.items.filter((item) => item.timeBlock === 'flexible') ?? [];
 
@@ -92,7 +96,13 @@ export default function TodayScreen() {
                 <Pressable onPress={isViewingToday ? undefined : goToToday} disabled={isViewingToday}>
                   <ThemedText
                     type="small"
-                    themeColor={isViewingToday ? 'textSecondary' : 'accent'}>
+                    style={{
+                      color: isViewingToday
+                        ? theme.textSecondary
+                        : missedCount > 0
+                          ? theme.warning
+                          : theme.success,
+                    }}>
                     {format(viewDate, 'EEEE, MMMM d')}
                     {!isViewingToday ? ' · back to today' : ''}
                   </ThemedText>
@@ -108,12 +118,22 @@ export default function TodayScreen() {
               <PlanHero plan={plan} doneLabel={isViewingToday ? 'done today' : 'done'} />
 
               {!isViewingToday ? (
-                <View style={[styles.readOnlyNote, { backgroundColor: theme.backgroundSelected }]}>
-                  <Ionicons name="lock-closed-outline" size={14} color={theme.textSecondary} />
-                  <ThemedText type="small" themeColor="textSecondary">
-                    Past days are read-only. Complete tasks on the day they happen.
-                  </ThemedText>
-                </View>
+                missedCount > 0 ? (
+                  <View style={[styles.readOnlyNote, { backgroundColor: theme.backgroundSelected }]}>
+                    <Ionicons name="alert-circle" size={14} color={theme.warning} />
+                    <ThemedText type="small" style={{ color: theme.warning }}>
+                      {missedCount} {missedCount === 1 ? 'task' : 'tasks'} not completed that day.
+                      Past days are read-only.
+                    </ThemedText>
+                  </View>
+                ) : (
+                  <View style={[styles.readOnlyNote, { backgroundColor: theme.backgroundSelected }]}>
+                    <Ionicons name="checkmark-circle" size={14} color={theme.success} />
+                    <ThemedText type="small" style={{ color: theme.success }}>
+                      All tasks were completed that day.
+                    </ThemedText>
+                  </View>
+                )
               ) : null}
 
               {isViewingToday && plan.items.length > 0 ? (

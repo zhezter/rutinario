@@ -31,6 +31,10 @@ function isScheduledToday(row: ActionRow, today: Date): boolean {
   return isDueToday(row, row.completions, today) || doneToday;
 }
 
+function existedOn(row: ActionRow, date: Date): boolean {
+  return dateKey(new Date(row.createdAt)) <= dateKey(date);
+}
+
 export function buildDailyPlan(
   rows: ActionRow[],
   today: Date,
@@ -39,7 +43,12 @@ export function buildDailyPlan(
   const todayKey = dateKey(today);
 
   const items: DailyPlanItem[] = rows
-    .filter((row) => isVisible(row, level) && isScheduledToday(row, today))
+    .filter(
+      (row) =>
+        isVisible(row, level) &&
+        isScheduledToday(row, today) &&
+        existedOn(row, today),
+    )
     .map((row) => {
       const completion = row.completions.find((c) => c.date === todayKey) ?? null;
       return {

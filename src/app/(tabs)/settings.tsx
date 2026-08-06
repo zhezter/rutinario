@@ -6,8 +6,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { GhostButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import {
+  buildCompletionsExport,
+  shareExport,
+  toCsv,
+  toJson,
+} from '@/domain/data/export';
 import {
   getRemindersEnabled,
   listReminderTargets,
@@ -18,6 +25,7 @@ import {
 } from '@/domain/notifications/reminders';
 import { useLiveTables } from '@/hooks/useLiveTables';
 import { useTheme } from '@/hooks/use-theme';
+import { dateKey } from '@/lib/dates';
 
 export default function SettingsScreen() {
   const theme = useTheme();
@@ -46,6 +54,20 @@ export default function SettingsScreen() {
     }
     await setRemindersEnabled(value);
     await syncReminders();
+  };
+
+  const handleExport = async (format: 'csv' | 'json') => {
+    try {
+      const rows = await buildCompletionsExport();
+      const stamp = dateKey(new Date());
+      if (format === 'csv') {
+        await shareExport(`completions-${stamp}.csv`, toCsv(rows), 'text/csv');
+      } else {
+        await shareExport(`completions-${stamp}.json`, toJson(rows), 'application/json');
+      }
+    } catch (err) {
+      Alert.alert('Export failed', err instanceof Error ? err.message : 'Something went wrong.');
+    }
   };
 
   return (
@@ -100,6 +122,26 @@ export default function SettingsScreen() {
                   )}
                 </View>
               )}
+            </Card>
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="download-outline" size={16} color={theme.accent} />
+              <ThemedText type="smallBold">Export data</ThemedText>
+            </View>
+            <Card style={styles.exportCard}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Download your completion history as a file you can keep or import elsewhere.
+              </ThemedText>
+              <View style={styles.exportRow}>
+                <View style={styles.exportButton}>
+                  <GhostButton label="Export CSV" onPress={() => void handleExport('csv')} />
+                </View>
+                <View style={styles.exportButton}>
+                  <GhostButton label="Export JSON" onPress={() => void handleExport('json')} />
+                </View>
+              </View>
             </Card>
           </View>
         </ScrollView>
@@ -159,6 +201,16 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   targetName: {
+    flex: 1,
+  },
+  exportCard: {
+    gap: Spacing.two,
+  },
+  exportRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  exportButton: {
     flex: 1,
   },
 });
