@@ -1,7 +1,7 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, max } from 'drizzle-orm';
 
 import { db } from '@/db/client';
-import { exerciseLogs } from '@/db/schema';
+import { exerciseLogs, workoutExercises } from '@/db/schema';
 
 export type LoggedSet = {
   workoutExerciseId: number;
@@ -75,4 +75,14 @@ export async function clearSet(
         eq(exerciseLogs.setIndex, setIndex),
       ),
     );
+}
+
+export async function getExerciseBestWeight(exerciseId: number): Promise<number | null> {
+  const rows = await db
+    .select({ maxWeight: max(exerciseLogs.weightKg) })
+    .from(exerciseLogs)
+    .innerJoin(workoutExercises, eq(exerciseLogs.workoutExerciseId, workoutExercises.id))
+    .where(eq(workoutExercises.exerciseId, exerciseId));
+  const value = rows[0]?.maxWeight ?? null;
+  return value ?? null;
 }

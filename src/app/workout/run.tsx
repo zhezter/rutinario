@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,27 +13,36 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Card } from '@/components/ui/card';
+import { GhostButton, PrimaryButton } from '@/components/ui/button';
 import { Spacing } from '@/constants/theme';
 import { getWorkoutDay } from '@/domain/workouts/workouts';
 import {
   clearSet,
   getDayLogs,
+  getExerciseBestWeight,
   recordSet,
 } from '@/domain/workouts/runner';
-import type { WorkoutDaySummary, WorkoutExerciseSummary } from '@/domain/workouts/types';
+import type { WorkoutDaySummary } from '@/domain/workouts/types';
 import { hapticSelection, hapticSuccess } from '@/lib/haptics';
 import { useLiveTables } from '@/hooks/useLiveTables';
 import { useTheme } from '@/hooks/use-theme';
 
-type SetDraft = {
-  weight: string;
-  reps: string;
-  done: boolean;
+type WorkoutStep = {
+  key: string;
+  slotId: number;
+  exerciseId: number;
+  exerciseName: string;
+  muscleGroup: string | null;
+  setIndex: number;
+  exerciseSets: number;
+  targetWeight: string;
+  targetReps: string;
+  restSec: number;
 };
 
-type SlotState = {
-  slot: WorkoutExerciseSummary;
-  sets: SetDraft[];
+type LoggedInfo = {
+  weight: string;
+  reps: string;
 };
 
 type RestState = {
@@ -49,29 +57,100 @@ function formatTime(totalSeconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+function buildSteps(day: WorkoutDaySummary): WorkoutStep[] {
+  const steps: WorkoutStep[] = [];
+  for (const slot of day.exercises) {
+    for (let setIndex = 0; setIndex < slot.sets; setIndex++) {
+      steps.push({
+        key: `${slot.id}:${setIndex}`,
+        slotId: slot.id,
+        exerciseId: slot.exercise.id,
+        exerciseName: slot.exercise.name,
+        muscleGroup: slot.exercise.muscleGroup,
+        setIndex,
+        exerciseSets: slot.sets,
+        targetWeight: slot.weightKg != null ? String(slot.weightKg) : '',
+        targetReps: slot.reps,
+        restSec: slot.restSec ?? day.restSec ?? 90,
+      });
+    }
+  }
+  return steps;
+}
+
+function prefillFor(steps: WorkoutStep[], done: Record<string, LoggedInfo>, index: number) {
+  const step = steps[index];
+  const existing = done[step.key];
+  if (existing) return existing;
+  for (let i = index - 1; i >= 0; i--) {
+    if (steps[i].slotId === step.slotId && done[steps[i].key]) {
+      return done[steps[i].key];
+    }
+  }
+  return { weight: step.targetWeight, reps: step.targetReps };
+}
+
 export default function WorkoutRunScreen() {
   const params = useLocalSearchParams<{ dayId: string }>();
   const dayId = Number(params.dayId);
   const theme = useTheme();
+
   const [day, setDay] = useState<WorkoutDaySummary | null>(null);
-  const [slots, setSlots] = useState<SlotState[]>([]);
+  const [steps, setSteps] = useState<WorkoutStep[]>([]);
+  const [current, setCurrent] = useState(0);
+  const [done, setDone] = useState<Record<string, LoggedInfo>>({});
+  const [weight, setWeight] = useState('');
+  const [reps, setReps] = useState('');
+  const [phase, setPhase] = useState<'warmup' | 'workout' | 'done'>('warmup');
   const [rest, setRest] = useState<RestState | null>(null);
+  const [pr, setPr] = useState<{ exerciseName: string; weight: number } | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const slotsRef = useRef(slots);
-  slotsRef.current = slots;
+
+  const stepsRef = useRef(steps);
+  stepsRef.current = steps;
+  const currentRef = useRef(current);
+  currentRef.current = current;
+  const doneRef = useRef(done);
+  doneRef.current = done;
+  const weightRef = useRef(weight);
+  weightRef.current = weight;
+  const repsRef = useRef(reps);
+  repsRef.current = reps;
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
   }, []);
 
+  const advance = () => {
+    const allSteps = stepsRef.current;
+    const next = currentRef.current + 1;
+    if (next >= allSteps.length) {
+      setRest(null);
+      setPhase('done');
+      return;
+    }
+    currentRef.current = next;
+    setCurrent(next);
+    const prefill = prefillFor(allSteps, doneRef.current, next);
+    setWeight(prefill.weight);
+    setReps(prefill.reps);
+  };
+
   useEffect(() => {
     if (!rest) return;
     if (now >= rest.endsAt) {
       setRest(null);
       hapticSuccess();
+      advance();
     }
   }, [now, rest]);
+
+  useEffect(() => {
+    if (!pr) return;
+    const id = setTimeout(() => setPr(null), 3500);
+    return () => clearTimeout(id);
+  }, [pr]);
 
   useLiveTables(
     ['workout_days', 'workout_exercises', 'exercises', 'exercise_logs'],
@@ -85,252 +164,331 @@ export default function WorkoutRunScreen() {
         loaded.exercises.map((slot) => slot.id),
         new Date(),
       );
-      const nextSlots: SlotState[] = loaded.exercises.map((slot) => {
-        const logged = logs.get(slot.id) ?? [];
-        return {
-          slot,
-          sets: Array.from({ length: slot.sets }, (_, setIndex) => {
-            const entry = logged.find((item) => item.setIndex === setIndex);
-            return {
-              weight: entry?.weightKg != null ? String(entry.weightKg) : slot.weightKg != null ? String(slot.weightKg) : '',
-              reps: entry?.reps != null ? String(entry.reps) : slot.reps,
-              done: entry != null,
-            };
-          }),
-        };
-      });
+      const allSteps = buildSteps(loaded);
+      const doneState: Record<string, LoggedInfo> = {};
+      for (const step of allSteps) {
+        const log = logs
+          .get(step.slotId)
+          ?.find((entry) => entry.setIndex === step.setIndex);
+        if (log) {
+          doneState[step.key] = {
+            weight: log.weightKg != null ? String(log.weightKg) : step.targetWeight,
+            reps: String(log.reps),
+          };
+        }
+      }
+      const firstNotDone = allSteps.findIndex((step) => !doneState[step.key]);
+      const startIndex = firstNotDone === -1 ? Math.max(0, allSteps.length - 1) : firstNotDone;
+      const prefill = prefillFor(allSteps, doneState, startIndex);
       setDay(loaded);
-      setSlots(nextSlots);
+      setSteps(allSteps);
+      setDone(doneState);
+      currentRef.current = startIndex;
+      setCurrent(startIndex);
+      setWeight(prefill.weight);
+      setReps(prefill.reps);
+      setPhase(
+        firstNotDone === -1
+          ? 'done'
+          : Object.keys(doneState).length > 0
+            ? 'workout'
+            : 'warmup',
+      );
+      setRest(null);
+      setPr(null);
     },
     [dayId],
   );
 
-  const allDone = useMemo(
-    () => slots.length > 0 && slots.every((slot) => slot.sets.every((set) => set.done)),
-    [slots],
-  );
+  const currentStep = steps[current];
+  const doneCount = Object.keys(done).length;
+  const totalSets = steps.length;
 
-  const totalSets = slots.reduce((acc, slot) => acc + slot.sets.length, 0);
-  const doneSets = slots.reduce(
-    (acc, slot) => acc + slot.sets.filter((set) => set.done).length,
-    0,
-  );
+  const handleDone = async () => {
+    const step = stepsRef.current[currentRef.current];
+    if (!step) return;
+    const parsedWeight = Number.parseFloat(weightRef.current);
+    const parsedReps = Number.parseInt(repsRef.current, 10);
+    const weightVal = Number.isNaN(parsedWeight) ? null : parsedWeight;
+    const repsVal = Number.isNaN(parsedReps) ? 0 : parsedReps;
 
-  const remainingAfter = (slotIndex: number, setIndex: number): number => {
-    let remaining = 0;
-    for (let i = slotIndex; i < slotsRef.current.length; i++) {
-      const slot = slotsRef.current[i];
-      for (let j = i === slotIndex ? setIndex + 1 : 0; j < slot.sets.length; j++) {
-        if (!slot.sets[j].done) remaining++;
-      }
+    let isPr = false;
+    if (weightVal != null) {
+      const prevBest = await getExerciseBestWeight(step.exerciseId);
+      isPr = prevBest == null || weightVal > prevBest;
     }
-    return remaining;
-  };
+    await recordSet(step.slotId, new Date(), step.setIndex, weightVal, repsVal);
 
-  const startRest = (seconds: number) => {
-    if (seconds <= 0) return;
-    setRest({ endsAt: Date.now() + seconds * 1000, total: seconds });
-  };
-
-  const toggleSet = (slotIndex: number, setIndex: number) => {
-    const current = slotsRef.current[slotIndex].sets[setIndex];
-    if (current.done) {
-      const next = slotsRef.current.map((slot) => ({ ...slot, sets: [...slot.sets] }));
-      next[slotIndex].sets[setIndex] = { ...current, done: false };
-      setSlots(next);
-      void clearSet(slotsRef.current[slotIndex].slot.id, new Date(), setIndex);
-      hapticSelection();
-      return;
-    }
-
-    const weight = Number.parseFloat(current.weight);
-    const reps = Number.parseInt(current.reps, 10);
-    const next = slotsRef.current.map((slot) => ({ ...slot, sets: [...slot.sets] }));
-    next[slotIndex].sets[setIndex] = { ...current, done: true };
-    setSlots(next);
-    void recordSet(
-      slotsRef.current[slotIndex].slot.id,
-      new Date(),
-      setIndex,
-      Number.isNaN(weight) ? null : weight,
-      Number.isNaN(reps) ? 0 : reps,
-    );
+    doneRef.current = {
+      ...doneRef.current,
+      [step.key]: { weight: weightRef.current, reps: repsRef.current },
+    };
+    setDone(doneRef.current);
     hapticSuccess();
 
-    const slot = slotsRef.current[slotIndex];
-    const restSec = slot.slot.restSec ?? day?.restSec ?? 90;
-    if (remainingAfter(slotIndex, setIndex) > 0) startRest(restSec);
+      if (isPr && weightVal != null) {
+        setPr({ exerciseName: step.exerciseName, weight: weightVal });
+      }
+
+    const next = currentRef.current + 1;
+    if (next >= stepsRef.current.length) {
+      setRest(null);
+      setPhase('done');
+      return;
+    }
+    setRest({ endsAt: Date.now() + step.restSec * 1000, total: step.restSec });
   };
 
-  const updateSet = (slotIndex: number, setIndex: number, field: 'weight' | 'reps', value: string) => {
-    const current = slotsRef.current[slotIndex].sets[setIndex];
-    const next = slotsRef.current.map((slot) => ({ ...slot, sets: [...slot.sets] }));
-    next[slotIndex].sets[setIndex] = { ...current, [field]: value };
-    setSlots(next);
-    if (current.done) {
-      const weight = Number.parseFloat(
-        field === 'weight' ? value : next[slotIndex].sets[setIndex].weight,
-      );
-      const reps = Number.parseInt(
-        field === 'reps' ? value : next[slotIndex].sets[setIndex].reps,
-        10,
-      );
-      void recordSet(
-        slotsRef.current[slotIndex].slot.id,
-        new Date(),
-        setIndex,
-        Number.isNaN(weight) ? null : weight,
-        Number.isNaN(reps) ? 0 : reps,
-      );
+  const handleSkip = () => {
+    const step = stepsRef.current[currentRef.current];
+    if (!step) return;
+    hapticSelection();
+    advance();
+  };
+
+  const handleUndo = () => {
+    const index = currentRef.current;
+    if (index <= 0) return;
+    const prevStep = stepsRef.current[index - 1];
+    const wasDone = doneRef.current[prevStep.key];
+    if (wasDone) {
+      void clearSet(prevStep.slotId, new Date(), prevStep.setIndex);
+      const nextDone = { ...doneRef.current };
+      delete nextDone[prevStep.key];
+      doneRef.current = nextDone;
+      setDone(nextDone);
     }
+    currentRef.current = index - 1;
+    setCurrent(index - 1);
+    setRest(null);
+    const prefill = prefillFor(stepsRef.current, doneRef.current, index - 1);
+    setWeight(prefill.weight);
+    setReps(prefill.reps);
+    hapticSelection();
   };
 
   const restRemaining = rest ? (rest.endsAt - now) / 1000 : 0;
-
-  const finish = () => {
-    Alert.alert(
-      'Session complete',
-      'All sets done. Nice work, see you next session.',
-      [{ text: 'Done', onPress: () => router.back() }],
-    );
-  };
+  const nextStep = currentStep
+    ? steps[current + 1] ?? null
+    : null;
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={8} style={styles.headerButton}>
             <Ionicons name="chevron-back" size={24} color={theme.text} />
           </Pressable>
           <View style={styles.headerText}>
-            <ThemedText type="title" style={styles.title}>
-              {day?.name}
-            </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              {doneSets} / {totalSets} sets
-            </ThemedText>
-          </View>
-        </View>
-
-        {rest && restRemaining > 0 ? (
-          <Card style={[styles.restCard, { backgroundColor: theme.accent }]}>
-            <View style={styles.restTop}>
-              <ThemedText type="smallBold" style={{ color: theme.background }}>
-                Rest
-              </ThemedText>
-              <ThemedText type="title" style={[styles.restTime, { color: theme.background }]}>
-                {formatTime(restRemaining)}
-              </ThemedText>
-            </View>
-            <View style={[styles.restBar, { backgroundColor: 'rgba(0,0,0,0.2)' }]}>
-              <View
-                style={[
-                  styles.restFill,
-                  {
-                    backgroundColor: theme.background,
-                    width: `${Math.min(100, Math.max(0, (restRemaining / rest.total) * 100))}%`,
-                  },
-                ]}
-              />
-            </View>
-            <Pressable
-              onPress={() => setRest(null)}
-              style={({ pressed }) => [
-                styles.skipButton,
-                { backgroundColor: 'rgba(0,0,0,0.15)', opacity: pressed ? 0.7 : 1 },
-              ]}>
-              <ThemedText type="smallBold" style={{ color: theme.background }}>
-                Skip rest
-              </ThemedText>
-            </Pressable>
-          </Card>
-        ) : null}
-
-        {slots.map((slotState, slotIndex) => (
-          <Card key={slotState.slot.id} style={styles.exerciseCard}>
-            <ThemedText type="smallBold">{slotState.slot.exercise.name}</ThemedText>
-            {slotState.slot.exercise.muscleGroup ? (
+            <ThemedText type="smallBold">{day?.name ?? 'Workout'}</ThemedText>
+            {phase === 'workout' ? (
               <ThemedText type="small" themeColor="textSecondary">
-                {slotState.slot.exercise.muscleGroup}
+                Set {Math.min(doneCount + 1, totalSets)} of {totalSets}
               </ThemedText>
             ) : null}
-            <View style={styles.sets}>
-              <View style={[styles.setHeaderRow]}>
-                <ThemedText type="small" themeColor="textSecondary" style={styles.setNumHeader}>
-                  Set
-                </ThemedText>
-                <ThemedText type="small" themeColor="textSecondary" style={styles.inputHeader}>
-                  kg
-                </ThemedText>
-                <ThemedText type="small" themeColor="textSecondary" style={styles.inputHeader}>
-                  reps
-                </ThemedText>
-              </View>
-              {slotState.sets.map((set, setIndex) => (
-                <View key={setIndex} style={styles.setRow}>
-                  <Pressable
-                    onPress={() => toggleSet(slotIndex, setIndex)}
-                    hitSlop={8}
-                    style={styles.checkbox}>
-                    <Ionicons
-                      name={set.done ? 'checkmark-circle' : 'ellipse-outline'}
-                      size={24}
-                      color={set.done ? theme.accent : theme.textSecondary}
-                    />
-                    <ThemedText type="small" themeColor="textSecondary">
-                      {setIndex + 1}
-                    </ThemedText>
-                  </Pressable>
-                  <TextInput
-                    value={set.weight}
-                    onChangeText={(value) => updateSet(slotIndex, setIndex, 'weight', value)}
-                    keyboardType="decimal-pad"
-                    placeholder="0"
-                    placeholderTextColor={theme.textSecondary}
+          </View>
+          {phase === 'workout' && doneCount > 0 ? (
+            <Pressable onPress={handleUndo} hitSlop={8} style={styles.headerButton}>
+              <ThemedText type="smallBold" style={{ color: theme.textSecondary }}>
+                Undo
+              </ThemedText>
+            </Pressable>
+          ) : null}
+        </View>
+
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          {phase === 'warmup' ? (
+            <WarmupView onStart={() => setPhase('workout')} />
+          ) : null}
+
+          {phase === 'done' ? (
+            <DoneView setCount={doneCount} onFinish={() => router.back()} />
+          ) : null}
+
+          {phase === 'workout' && currentStep ? (
+            <>
+              {totalSets > 0 ? (
+                <View style={[styles.progressTrack, { backgroundColor: theme.backgroundSelected }]}>
+                  <View
                     style={[
-                      styles.input,
-                      { backgroundColor: theme.backgroundSelected, color: theme.text },
-                    ]}
-                  />
-                  <TextInput
-                    value={set.reps}
-                    onChangeText={(value) => updateSet(slotIndex, setIndex, 'reps', value)}
-                    keyboardType="number-pad"
-                    placeholder="0"
-                    placeholderTextColor={theme.textSecondary}
-                    style={[
-                      styles.input,
-                      { backgroundColor: theme.backgroundSelected, color: theme.text },
+                      styles.progressFill,
+                      { backgroundColor: theme.accent, width: `${(doneCount / totalSets) * 100}%` },
                     ]}
                   />
                 </View>
-              ))}
-            </View>
-          </Card>
-        ))}
+              ) : null}
 
-        {slots.length === 0 ? (
-          <ThemedText type="small" themeColor="textSecondary">
-            This day has no exercises yet.
-          </ThemedText>
-        ) : null}
+              {pr ? (
+                <Card style={[styles.prCard, { backgroundColor: theme.success }]}>
+                  <Ionicons name="trophy" size={18} color={theme.background} />
+                  <ThemedText type="smallBold" style={[styles.prText, { color: theme.background }]}>
+                    New PR · {pr.exerciseName} · {pr.weight} kg
+                  </ThemedText>
+                </Card>
+              ) : null}
 
-        {allDone ? (
-          <Pressable
-            onPress={finish}
-            style={({ pressed }) => [
-              styles.finishButton,
-              { backgroundColor: theme.accent, opacity: pressed ? 0.7 : 1 },
-            ]}>
-            <ThemedText type="smallBold" style={{ color: theme.background }}>
-              Finish session
-            </ThemedText>
-          </Pressable>
-        ) : null}
-      </ScrollView>
+              {rest && restRemaining > 0 ? (
+                <Card style={[styles.restCard, { backgroundColor: theme.accent }]}>
+                  <View style={styles.restTop}>
+                    <ThemedText type="smallBold" style={{ color: theme.background }}>
+                      Rest
+                    </ThemedText>
+                    <ThemedText type="title" style={[styles.restTime, { color: theme.background }]}>
+                      {formatTime(restRemaining)}
+                    </ThemedText>
+                  </View>
+                  <View style={[styles.restBar, { backgroundColor: 'rgba(0,0,0,0.2)' }]}>
+                    <View
+                      style={[
+                        styles.restFill,
+                        {
+                          backgroundColor: theme.background,
+                          width: `${Math.min(100, Math.max(0, (restRemaining / rest.total) * 100))}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <ThemedText type="small" style={{ color: theme.background }}>
+                    Next: {nextStep ? `${nextStep.exerciseName} · set ${nextStep.setIndex + 1}` : 'finish'}
+                  </ThemedText>
+                  <Pressable
+                    onPress={() => {
+                      setRest(null);
+                      advance();
+                    }}
+                    style={({ pressed }) => [
+                      styles.skipButton,
+                      { backgroundColor: 'rgba(0,0,0,0.15)', opacity: pressed ? 0.7 : 1 },
+                    ]}>
+                    <ThemedText type="smallBold" style={{ color: theme.background }}>
+                      Skip rest & next set
+                    </ThemedText>
+                  </Pressable>
+                </Card>
+              ) : (
+                <Card style={styles.exerciseCard}>
+                  <ThemedText type="small" themeColor="textSecondary" style={styles.exerciseEyebrow}>
+                    {currentStep.muscleGroup ?? 'Exercise'}
+                  </ThemedText>
+                  <ThemedText type="title" style={styles.exerciseName}>
+                    {currentStep.exerciseName}
+                  </ThemedText>
+
+                  <View style={styles.setChips}>
+                    {Array.from({ length: currentStep.exerciseSets }, (_, i) => {
+                      const chipKey = `${currentStep.slotId}:${i}`;
+                      const isDone = Boolean(done[chipKey]);
+                      const isCurrent = i === currentStep.setIndex;
+                      return (
+                        <View
+                          key={chipKey}
+                          style={[
+                            styles.setChip,
+                            {
+                              backgroundColor: isDone
+                                ? theme.success
+                                : isCurrent
+                                  ? theme.accent
+                                  : theme.backgroundSelected,
+                            },
+                          ]}>
+                          <ThemedText
+                            type="smallBold"
+                            style={{
+                              color: isDone || isCurrent ? theme.background : theme.text,
+                            }}>
+                            {i + 1}
+                          </ThemedText>
+                        </View>
+                      );
+                    })}
+                  </View>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Set {currentStep.setIndex + 1} of {currentStep.exerciseSets}
+                  </ThemedText>
+
+                  <View style={styles.inputs}>
+                    <View style={styles.inputField}>
+                      <ThemedText type="small" themeColor="textSecondary">
+                        Weight (kg)
+                      </ThemedText>
+                      <TextInput
+                        value={weight}
+                        onChangeText={setWeight}
+                        keyboardType="decimal-pad"
+                        placeholder={currentStep.targetWeight || '0'}
+                        placeholderTextColor={theme.textSecondary}
+                        style={[
+                          styles.input,
+                          { backgroundColor: theme.backgroundSelected, color: theme.text },
+                        ]}
+                      />
+                    </View>
+                    <View style={styles.inputField}>
+                      <ThemedText type="small" themeColor="textSecondary">
+                        Reps
+                      </ThemedText>
+                      <TextInput
+                        value={reps}
+                        onChangeText={setReps}
+                        keyboardType="number-pad"
+                        placeholder={currentStep.targetReps}
+                        placeholderTextColor={theme.textSecondary}
+                        style={[
+                          styles.input,
+                          { backgroundColor: theme.backgroundSelected, color: theme.text },
+                        ]}
+                      />
+                    </View>
+                  </View>
+
+                  <PrimaryButton label="Set done" onPress={() => void handleDone()} />
+                  <GhostButton label="Skip this set" onPress={handleSkip} />
+                </Card>
+              )}
+            </>
+          ) : null}
+        </ScrollView>
       </SafeAreaView>
     </ThemedView>
+  );
+}
+
+function WarmupView({ onStart }: { onStart: () => void }) {
+  const theme = useTheme();
+  return (
+    <Card style={styles.warmupCard}>
+      <View style={styles.warmupIcon}>
+        <Ionicons name="flame" size={28} color={theme.accent} />
+      </View>
+      <ThemedText type="title" style={styles.warmupTitle}>
+        Warm-up first
+      </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary" style={styles.warmupBody}>
+        5–10 minutes of light cardio and joint mobility. Do a few light sets of the first
+        exercise with the bar to feel it out before the working sets.
+      </ThemedText>
+      <PrimaryButton label="I'm warmed up" onPress={onStart} />
+      <GhostButton label="Skip warm-up" onPress={onStart} />
+    </Card>
+  );
+}
+
+function DoneView({ setCount, onFinish }: { setCount: number; onFinish: () => void }) {
+  const theme = useTheme();
+  return (
+    <View style={styles.doneView}>
+      <View style={[styles.doneIcon, { backgroundColor: theme.success }]}>
+        <Ionicons name="checkmark" size={40} color={theme.background} />
+      </View>
+      <ThemedText type="title" style={styles.doneTitle}>
+        Session complete
+      </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        {setCount} set{setCount === 1 ? '' : 's'} logged. Nice work.
+      </ThemedText>
+      <PrimaryButton label="Finish" onPress={onFinish} />
+    </View>
   );
 }
 
@@ -341,16 +499,12 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  scroll: {
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.two,
-    paddingBottom: Spacing.four,
-    gap: Spacing.three,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
   },
   headerButton: {
     padding: Spacing.one,
@@ -359,9 +513,28 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: Spacing.half,
   },
-  title: {
-    fontSize: 24,
-    lineHeight: 30,
+  scroll: {
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.four,
+    gap: Spacing.three,
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+  },
+  prCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    padding: Spacing.three,
+  },
+  prText: {
+    flex: 1,
   },
   restCard: {
     padding: Spacing.three,
@@ -395,45 +568,71 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     gap: Spacing.two,
   },
-  sets: {
-    gap: Spacing.one,
+  exerciseEyebrow: {
+    textTransform: 'uppercase',
   },
-  setHeaderRow: {
+  exerciseName: {
+    fontSize: 26,
+    lineHeight: 32,
+  },
+  setChips: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: Spacing.two,
+    marginTop: Spacing.one,
   },
-  setNumHeader: {
-    width: 56,
+  setChip: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  inputHeader: {
+  inputs: {
+    flexDirection: 'row',
+    gap: Spacing.three,
+    marginTop: Spacing.one,
+  },
+  inputField: {
     flex: 1,
-    textAlign: 'center',
-  },
-  setRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-  },
-  checkbox: {
-    width: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: Spacing.one,
   },
   input: {
-    flex: 1,
     borderRadius: Spacing.two,
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.two,
-    fontSize: 16,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.three,
+    fontSize: 24,
     textAlign: 'center',
   },
-  finishButton: {
+  warmupCard: {
+    padding: Spacing.four,
+    gap: Spacing.three,
+    marginTop: Spacing.four,
+  },
+  warmupIcon: {
+    alignSelf: 'flex-start',
+  },
+  warmupTitle: {
+    fontSize: 26,
+    lineHeight: 32,
+  },
+  warmupBody: {
+    lineHeight: 20,
+  },
+  doneView: {
+    alignItems: 'center',
+    gap: Spacing.three,
+    marginTop: Spacing.five,
+    paddingHorizontal: Spacing.three,
+  },
+  doneIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: Spacing.three,
-    borderRadius: Spacing.three,
-    marginTop: Spacing.one,
+  },
+  doneTitle: {
+    fontSize: 26,
+    lineHeight: 32,
   },
 });

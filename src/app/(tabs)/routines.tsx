@@ -45,6 +45,7 @@ type ConfirmState = {
 export default function RoutinesScreen() {
   const hierarchy = useHierarchy();
   const theme = useTheme();
+  const [subtab, setSubtab] = useState<'habits' | 'workout'>('habits');
 
   const [menuTarget, setMenuTarget] = useState<{
     kind: 'domain' | 'system' | 'routine';
@@ -211,48 +212,87 @@ export default function RoutinesScreen() {
         <ScrollView
           contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}>
-          <View style={styles.header}>
-            <View style={styles.headerText}>
-              <ThemedText type="title" style={styles.title}>
-                Routines
+          <View style={styles.subtabs}>
+            <Pressable
+              onPress={() => setSubtab('habits')}
+              style={({ pressed }) => [
+                styles.subtab,
+                {
+                  backgroundColor:
+                    subtab === 'habits' ? theme.accent : theme.backgroundSelected,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}>
+              <ThemedText
+                type="smallBold"
+                style={{ color: subtab === 'habits' ? theme.background : theme.text }}>
+                Habits
               </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                Everything that keeps your days running
+            </Pressable>
+            <Pressable
+              onPress={() => setSubtab('workout')}
+              style={({ pressed }) => [
+                styles.subtab,
+                {
+                  backgroundColor:
+                    subtab === 'workout' ? theme.accent : theme.backgroundSelected,
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}>
+              <ThemedText
+                type="smallBold"
+                style={{ color: subtab === 'workout' ? theme.background : theme.text }}>
+                Workout
               </ThemedText>
-            </View>
-            <View style={styles.headerButtons}>
-              <Pressable
-                onPress={() => setOverviewMenu(true)}
-                hitSlop={8}
-                style={styles.headerButton}>
-                <Ionicons name="ellipsis-horizontal" size={24} color={theme.text} />
-              </Pressable>
-              <Pressable
-                onPress={() => setRoutineForm({ mode: 'new' })}
-                hitSlop={8}
-                style={styles.headerButton}>
-                <Ionicons name="add" size={26} color={theme.accent} />
-              </Pressable>
-            </View>
+            </Pressable>
           </View>
 
-          <WorkoutSection />
+          {subtab === 'workout' ? (
+            <WorkoutSection />
+          ) : (
+            <>
+              <View style={styles.header}>
+                <View style={styles.headerText}>
+                  <ThemedText type="title" style={styles.title}>
+                    Routines
+                  </ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Everything that keeps your days running
+                  </ThemedText>
+                </View>
+                <View style={styles.headerButtons}>
+                  <Pressable
+                    onPress={() => setOverviewMenu(true)}
+                    hitSlop={8}
+                    style={styles.headerButton}>
+                    <Ionicons name="ellipsis-horizontal" size={24} color={theme.text} />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setRoutineForm({ mode: 'new' })}
+                    hitSlop={8}
+                    style={styles.headerButton}>
+                    <Ionicons name="add" size={26} color={theme.accent} />
+                  </Pressable>
+                </View>
+              </View>
 
-          {hierarchy?.map((domain) => (
-            <DomainBlock
-              key={domain.id}
-              domain={domain}
-              onLongPressDomain={(item) => openRoutineMenu('domain', item)}
-              onLongPressSystem={(item) => openRoutineMenu('system', item)}
-              onLongPressRoutine={(item) => openRoutineMenu('routine', item)}
-            />
-          ))}
+              {hierarchy?.map((domain) => (
+                <DomainBlock
+                  key={domain.id}
+                  domain={domain}
+                  onLongPressDomain={(item) => openRoutineMenu('domain', item)}
+                  onLongPressSystem={(item) => openRoutineMenu('system', item)}
+                  onLongPressRoutine={(item) => openRoutineMenu('routine', item)}
+                />
+              ))}
 
-          {!hierarchy || hierarchy.length === 0 ? (
-            <ThemedText type="small" themeColor="textSecondary">
-              No routines yet — tap + to create your first one.
-            </ThemedText>
-          ) : null}
+              {!hierarchy || hierarchy.length === 0 ? (
+                <ThemedText type="small" themeColor="textSecondary">
+                  No routines yet — tap + to create your first one.
+                </ThemedText>
+              ) : null}
+            </>
+          )}
         </ScrollView>
       </SafeAreaView>
 
@@ -445,6 +485,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  subtabs: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  subtab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: Spacing.two,
+    borderRadius: Spacing.three,
   },
   headerText: {
     flex: 1,
