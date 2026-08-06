@@ -15,6 +15,7 @@ import { ThemedView } from '@/components/themed-view';
 import { GhostButton, PrimaryButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ConfirmSheet } from '@/components/ui/prompt';
+import { WorkoutTodayCard } from '@/components/workout/workout-today-card';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { formatMinutes } from '@/domain/dashboard/buildDailyPlan';
 import { greetingFor, progressMessage } from '@/domain/dashboard/copy';
@@ -290,6 +291,8 @@ export default function TodayScreen() {
               Getting things ready…
             </ThemedText>
           )}
+
+          {isViewingToday ? <WorkoutTodayCard /> : null}
 
           <DayNoteCard date={dateKey(viewDate)} />
         </ScrollView>

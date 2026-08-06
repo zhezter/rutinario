@@ -26,6 +26,11 @@ export default function TabsLayout() {
         <Icon src={require('@/assets/images/tabIcons/routines.png')} />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="workout">
+        <Label>Workout</Label>
+        <Icon src={require('@/assets/images/tabIcons/workout.png')} />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="stats">
         <Label>Stats</Label>
         <Icon src={require('@/assets/images/tabIcons/stats.png')} />

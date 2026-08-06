@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 export const scheduleTypes = ['fixed', 'anchored', 'flexible'] as const;
 export type ScheduleType = (typeof scheduleTypes)[number];
@@ -162,6 +162,86 @@ export const dayClosures = sqliteTable('day_closures', {
     .$defaultFn(() => Date.now()),
 });
 
+export const workoutModes = ['weekday', 'cycle'] as const;
+export type WorkoutMode = (typeof workoutModes)[number];
+
+export const workouts = sqliteTable('workouts', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  mode: text('mode', { enum: workoutModes }).notNull().default('weekday'),
+  defaultRestSec: integer('default_rest_sec').notNull().default(90),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: integer('created_at')
+    .notNull()
+    .$defaultFn(() => Date.now()),
+});
+
+export const workoutDays = sqliteTable('workout_days', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  workoutId: integer('workout_id')
+    .notNull()
+    .references(() => workouts.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  position: integer('position').notNull().default(0),
+  weekday: integer('weekday'),
+  restSec: integer('rest_sec'),
+  createdAt: integer('created_at')
+    .notNull()
+    .$defaultFn(() => Date.now()),
+});
+
+export const exercises = sqliteTable('exercises', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  muscleGroup: text('muscle_group'),
+  createdAt: integer('created_at')
+    .notNull()
+    .$defaultFn(() => Date.now()),
+});
+
+export const workoutExercises = sqliteTable('workout_exercises', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  workoutDayId: integer('workout_day_id')
+    .notNull()
+    .references(() => workoutDays.id, { onDelete: 'cascade' }),
+  exerciseId: integer('exercise_id')
+    .notNull()
+    .references(() => exercises.id, { onDelete: 'cascade' }),
+  sets: integer('sets').notNull().default(3),
+  reps: text('reps').notNull().default('10'),
+  restSec: integer('rest_sec'),
+  weightKg: real('weight_kg'),
+  orderIndex: integer('order_index').notNull().default(0),
+  notes: text('notes'),
+  createdAt: integer('created_at')
+    .notNull()
+    .$defaultFn(() => Date.now()),
+});
+
+export const exerciseLogs = sqliteTable(
+  'exercise_logs',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    workoutExerciseId: integer('workout_exercise_id')
+      .notNull()
+      .references(() => workoutExercises.id, { onDelete: 'cascade' }),
+    date: text('date').notNull(),
+    setIndex: integer('set_index').notNull(),
+    weightKg: real('weight_kg'),
+    reps: integer('reps').notNull(),
+    completedAt: integer('completed_at')
+      .notNull()
+      .$defaultFn(() => Date.now()),
+  },
+  (table) => [
+    uniqueIndex('exercise_logs_slot_unique').on(
+      table.workoutExerciseId,
+      table.date,
+      table.setIndex,
+    ),
+  ],
+);
+
 export const domainsRelations = relations(domains, ({ many }) => ({
   systems: many(systems),
 }));
@@ -202,5 +282,40 @@ export const completionsRelations = relations(completions, ({ one }) => ({
   action: one(actions, {
     fields: [completions.actionId],
     references: [actions.id],
+  }),
+}));
+
+export const workoutsRelations = relations(workouts, ({ many }) => ({
+  days: many(workoutDays),
+}));
+
+export const workoutDaysRelations = relations(workoutDays, ({ one, many }) => ({
+  workout: one(workouts, {
+    fields: [workoutDays.workoutId],
+    references: [workouts.id],
+  }),
+  exercises: many(workoutExercises),
+}));
+
+export const exercisesRelations = relations(exercises, ({ many }) => ({
+  slots: many(workoutExercises),
+}));
+
+export const workoutExercisesRelations = relations(workoutExercises, ({ one, many }) => ({
+  day: one(workoutDays, {
+    fields: [workoutExercises.workoutDayId],
+    references: [workoutDays.id],
+  }),
+  exercise: one(exercises, {
+    fields: [workoutExercises.exerciseId],
+    references: [exercises.id],
+  }),
+  logs: many(exerciseLogs),
+}));
+
+export const exerciseLogsRelations = relations(exerciseLogs, ({ one }) => ({
+  slot: one(workoutExercises, {
+    fields: [exerciseLogs.workoutExerciseId],
+    references: [workoutExercises.id],
   }),
 }));
