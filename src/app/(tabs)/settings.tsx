@@ -3,7 +3,7 @@ import { format, parse } from 'date-fns';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -19,9 +19,11 @@ import {
 } from '@/domain/data/export';
 import { importCompletionsJson } from '@/domain/data/import';
 import {
+  getCloseReminder,
   getRemindersEnabled,
   listReminderTargets,
   requestReminderPermission,
+  setCloseReminder,
   setRemindersEnabled,
   syncReminders,
   type ReminderTarget,
@@ -31,16 +33,25 @@ import { useTheme } from '@/hooks/use-theme';
 import { dateKey } from '@/lib/dates';
 import { hapticSuccess } from '@/lib/haptics';
 
+const CLOSE_TIME_OPTIONS = ['20:00', '21:00', '22:00', '23:00'];
+
+type CloseReminderState = { enabled: boolean; time: string };
+
 export default function SettingsScreen() {
   const theme = useTheme();
   const [enabled, setEnabled] = useState(false);
   const [targets, setTargets] = useState<ReminderTarget[]>([]);
+  const [closeReminder, setCloseReminderState] = useState<CloseReminderState>({
+    enabled: false,
+    time: '21:00',
+  });
 
   useLiveTables(
     ['app_settings', 'actions', 'procedures', 'routines'],
     () => {
       void getRemindersEnabled().then(setEnabled);
       void listReminderTargets().then(setTargets);
+      void getCloseReminder().then(setCloseReminderState);
     },
     [],
   );
@@ -58,6 +69,28 @@ export default function SettingsScreen() {
     }
     await setRemindersEnabled(value);
     await syncReminders();
+  };
+
+  const handleCloseReminderToggle = async (value: boolean) => {
+    if (value) {
+      const granted = await requestReminderPermission();
+      if (!granted) {
+        Alert.alert(
+          'Permission needed',
+          'Enable notifications in your system settings to get the evening reminder.',
+        );
+        return;
+      }
+    }
+    await setCloseReminder(value, closeReminder.time);
+    await syncReminders();
+  };
+
+  const handleCloseReminderTime = async (time: string) => {
+    if (time === closeReminder.time) return;
+    setCloseReminderState((prev) => ({ ...prev, time }));
+    await setCloseReminder(closeReminder.enabled, time);
+    if (closeReminder.enabled) await syncReminders();
   };
 
   const handleExport = async (format: 'csv' | 'json') => {
@@ -181,6 +214,57 @@ export default function SettingsScreen() {
 
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
+              <Ionicons name="moon-outline" size={16} color={theme.accent} />
+              <ThemedText type="smallBold">Evening close reminder</ThemedText>
+            </View>
+
+            <Card>
+              <View style={styles.row}>
+                <View style={styles.rowText}>
+                  <ThemedText type="smallBold">Close your day</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    A nightly nudge to wrap up the day in Rutinario.
+                  </ThemedText>
+                </View>
+                <Switch
+                  value={closeReminder.enabled}
+                  onValueChange={(value) => void handleCloseReminderToggle(value)}
+                  trackColor={{ true: theme.accent, false: theme.backgroundSelected }}
+                  thumbColor={theme.background}
+                />
+              </View>
+
+              {closeReminder.enabled && (
+                <View style={styles.timeRow}>
+                  {CLOSE_TIME_OPTIONS.map((time) => {
+                    const selected = time === closeReminder.time;
+                    return (
+                      <Pressable
+                        key={time}
+                        onPress={() => void handleCloseReminderTime(time)}
+                        style={[
+                          styles.timePill,
+                          {
+                            backgroundColor: selected
+                              ? theme.accent
+                              : theme.backgroundSelected,
+                          },
+                        ]}>
+                        <ThemedText
+                          type="smallBold"
+                          style={{ color: selected ? theme.background : theme.text }}>
+                          {format(parse(time, 'HH:mm', new Date()), 'h:mm a')}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+            </Card>
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
               <Ionicons name="download-outline" size={16} color={theme.accent} />
               <ThemedText type="smallBold">Export data</ThemedText>
             </View>
@@ -270,6 +354,17 @@ const styles = StyleSheet.create({
   },
   targetName: {
     flex: 1,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    paddingTop: Spacing.two,
+  },
+  timePill: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: Spacing.two,
+    borderRadius: Spacing.two,
   },
   exportCard: {
     gap: Spacing.two,

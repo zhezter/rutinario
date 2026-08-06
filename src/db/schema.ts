@@ -154,6 +154,14 @@ export const dayNotes = sqliteTable('day_notes', {
     .$defaultFn(() => Date.now()),
 });
 
+export const dayClosures = sqliteTable('day_closures', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  date: text('date').notNull().unique(),
+  closedAt: integer('closed_at')
+    .notNull()
+    .$defaultFn(() => Date.now()),
+});
+
 export const domainsRelations = relations(domains, ({ many }) => ({
   systems: many(systems),
 }));

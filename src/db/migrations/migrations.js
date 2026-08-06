@@ -6,6 +6,7 @@ import m0001 from './0001_nifty_silver_fox.sql';
 import m0002 from './0002_public_pestilence.sql';
 import m0003 from './0003_dazzling_nova.sql';
 import m0004 from './0004_thick_bullseye.sql';
+import m0005 from './0005_mature_may_parker.sql';
 
   export default {
     journal,
@@ -14,7 +15,8 @@ import m0004 from './0004_thick_bullseye.sql';
 m0001,
 m0002,
 m0003,
-m0004
+m0004,
+m0005
     }
   }
   

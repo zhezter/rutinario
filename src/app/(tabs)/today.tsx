@@ -18,6 +18,7 @@ import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { formatMinutes } from '@/domain/dashboard/buildDailyPlan';
 import { greetingFor, progressMessage } from '@/domain/dashboard/copy';
 import { toggleCompletion } from '@/domain/dashboard/completions';
+import { closeDay, uncloseDay } from '@/domain/dashboard/dayClosure';
 import {
   getEnergyCheckinDate,
   getStoredEnergyLevel,
@@ -30,6 +31,7 @@ import {
   type TimeBlock,
 } from '@/domain/scheduling/anchors';
 import { useDailyPlan } from '@/hooks/useDailyPlan';
+import { useDayClosure } from '@/hooks/useDayClosure';
 import { useDayNote } from '@/hooks/useDayNote';
 import { useTheme } from '@/hooks/use-theme';
 import { useUIStore, type TodayView } from '@/stores/uiStore';
@@ -44,6 +46,7 @@ export default function TodayScreen() {
   const [selectedBlock, setSelectedBlock] = useState<TimeBlock>(() => timeBlockFromDate(today));
   const [showEnergyCheckIn, setShowEnergyCheckIn] = useState(false);
   const plan = useDailyPlan(viewDate);
+  const { closedAt } = useDayClosure(dateKey(viewDate));
   const theme = useTheme();
   const activeLevel = useUIStore((state) => state.activeLevel);
   const setActiveLevel = useUIStore((state) => state.setActiveLevel);
@@ -105,6 +108,16 @@ export default function TodayScreen() {
     void toggleCompletion(item.actionId, viewDate, item.completed);
   };
 
+  const handleCloseDay = () => {
+    hapticSuccess();
+    void closeDay(dateKey(today));
+  };
+
+  const handleUndoClose = () => {
+    hapticSelection();
+    void uncloseDay(dateKey(today));
+  };
+
   const missedCount = isViewingToday
     ? 0
     : (plan?.items.filter((item) => !item.completed).length ?? 0);
@@ -139,6 +152,14 @@ export default function TodayScreen() {
                     {!isViewingToday ? ' · back to today' : ''}
                   </ThemedText>
                 </Pressable>
+                {closedAt ? (
+                  <View style={[styles.closedChip, { backgroundColor: theme.backgroundSelected }]}>
+                    <Ionicons name="checkmark-circle" size={12} color={theme.success} />
+                    <ThemedText type="small" style={[styles.closedChipLabel, { color: theme.success }]}>
+                      closed
+                    </ThemedText>
+                  </View>
+                ) : null}
                 <DateChevron icon="chevron-forward" onPress={goToNextDay} disabled={isViewingToday} />
               </View>
             </View>
@@ -170,6 +191,15 @@ export default function TodayScreen() {
 
               {isViewingToday && plan.items.length > 0 ? (
                 <PrimaryButton label="Run today's plan" onPress={() => router.push('/run-day')} />
+              ) : null}
+
+              {isViewingToday && plan.items.length > 0 ? (
+                <CloseDayCard
+                  plan={plan}
+                  closed={closedAt !== null}
+                  onClose={handleCloseDay}
+                  onUndo={handleUndoClose}
+                />
               ) : null}
 
               <BlockSelector value={selectedBlock} onChange={setSelectedBlock} />
@@ -418,6 +448,70 @@ function DayNoteCard({ date }: { date: string }) {
   );
 }
 
+function CloseDayCard({
+  plan,
+  closed,
+  onClose,
+  onUndo,
+}: {
+  plan: DailyPlan;
+  closed: boolean;
+  onClose: () => void;
+  onUndo: () => void;
+}) {
+  const theme = useTheme();
+
+  if (closed) {
+    return (
+      <View style={[styles.readOnlyNote, { backgroundColor: theme.backgroundSelected }]}>
+        <Ionicons name="checkmark-circle" size={14} color={theme.success} />
+        <ThemedText type="small" style={[styles.closeClosedLabel, { color: theme.success }]}>
+          Day closed — the wrap-up is done.
+        </ThemedText>
+        <Pressable onPress={onUndo} hitSlop={8}>
+          <ThemedText type="smallBold" style={{ color: theme.accent }}>
+            Undo
+          </ThemedText>
+        </Pressable>
+      </View>
+    );
+  }
+
+  const completed = plan.items.filter((item) => item.completed).length;
+  const pending = plan.items.filter((item) => !item.completed);
+
+  return (
+    <View style={styles.section}>
+      <SectionTitle>Close the day</SectionTitle>
+      <Card style={styles.closeCard}>
+        <View style={styles.closeSummaryRow}>
+          <ThemedText type="smallBold">
+            {completed}/{plan.items.length} done
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            about {formatMinutes(plan.completedMinutes)} completed
+          </ThemedText>
+        </View>
+        {pending.length > 0 ? (
+          <>
+            <ThemedText type="small" themeColor="textSecondary">
+              Still pending: {pending.map((item) => item.name).join(', ')}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Closing isn&apos;t skipping — it&apos;s deciding. Wrap up, then close.
+            </ThemedText>
+          </>
+        ) : (
+          <ThemedText type="small" themeColor="textSecondary">
+            Everything done. Add a reflection in the day note, then close.
+          </ThemedText>
+        )}
+        <PrimaryButton label="Close the day" onPress={onClose} />
+      </Card>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -456,6 +550,18 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  closedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderRadius: Spacing.two,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: 2,
+  },
+  closedChipLabel: {
+    fontSize: 11,
+    lineHeight: 14,
   },
   greeting: {
     fontSize: 32,
@@ -527,5 +633,17 @@ const styles = StyleSheet.create({
   },
   noteFooter: {
     alignItems: 'flex-end',
+  },
+  closeCard: {
+    gap: Spacing.two,
+  },
+  closeSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+  },
+  closeClosedLabel: {
+    flex: 1,
   },
 });
