@@ -11,6 +11,11 @@ import { ThemedView } from '@/components/themed-view';
 import { Card } from '@/components/ui/card';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import {
+  formatSuggestionHour,
+  getBestTimeSuggestions,
+  type BestTimeSuggestion,
+} from '@/domain/dashboard/bestTime';
+import {
   getStatsSnapshot,
   type CalendarDay,
   type DomainStat,
@@ -28,11 +33,13 @@ const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 export default function StatsScreen() {
   const theme = useTheme();
   const [stats, setStats] = useState<StatsSnapshot | null>(null);
+  const [suggestions, setSuggestions] = useState<BestTimeSuggestion[]>([]);
 
   useLiveTables(
     ['completions', 'actions', 'procedures', 'routines', 'systems', 'domains'],
     () => {
       void getStatsSnapshot().then(setStats);
+      void getBestTimeSuggestions().then(setSuggestions);
     },
     [],
   );
@@ -131,6 +138,21 @@ export default function StatsScreen() {
                   ) : (
                     stats.domains.map((domain) => (
                       <DomainRow key={domain.name} domain={domain} />
+                    ))
+                  )}
+                </Card>
+              </View>
+
+              <View style={styles.section}>
+                <SectionTitle>Suggested times</SectionTitle>
+                <Card style={styles.domainsCard}>
+                  {suggestions.length === 0 ? (
+                    <ThemedText type="small" themeColor="textSecondary">
+                      Complete a task a few times and we&apos;ll suggest the time you usually do it.
+                    </ThemedText>
+                  ) : (
+                    suggestions.map((suggestion) => (
+                      <SuggestedTimeRow key={suggestion.actionId} suggestion={suggestion} />
                     ))
                   )}
                 </Card>
@@ -305,6 +327,30 @@ function accentWithOpacity(hex: string, opacity: number): string {
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 }
 
+function SuggestedTimeRow({ suggestion }: { suggestion: BestTimeSuggestion }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={() => router.push(`/routine/${suggestion.routineId}`)}
+      style={({ pressed }) => [
+        styles.suggestionRow,
+        pressed && { opacity: 0.6 },
+      ]}>
+      <Ionicons name="time-outline" size={16} color={theme.accent} />
+      <View style={styles.suggestionText}>
+        <ThemedText type="smallBold" style={styles.suggestionName} numberOfLines={1}>
+          {suggestion.actionName}
+        </ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          {suggestion.routineName} · best {formatSuggestionHour(suggestion.hour)} (
+          {suggestion.bestCount}×)
+        </ThemedText>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
+    </Pressable>
+  );
+}
+
 function RoutineTrendRow({ routine }: { routine: RoutineTrendStat }) {
   const theme = useTheme();
   return (
@@ -435,6 +481,18 @@ const styles = StyleSheet.create({
   },
   domainRow: {
     gap: Spacing.one,
+  },
+  suggestionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  suggestionText: {
+    flex: 1,
+    gap: 1,
+  },
+  suggestionName: {
+    fontSize: 12,
   },
   domainNameRow: {
     flexDirection: 'row',

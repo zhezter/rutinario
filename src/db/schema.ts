@@ -145,6 +145,15 @@ export const appSettings = sqliteTable('app_settings', {
   value: text('value').notNull(),
 });
 
+export const dayNotes = sqliteTable('day_notes', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  date: text('date').notNull().unique(),
+  note: text('note').notNull(),
+  updatedAt: integer('updated_at')
+    .notNull()
+    .$defaultFn(() => Date.now()),
+});
+
 export const domainsRelations = relations(domains, ({ many }) => ({
   systems: many(systems),
 }));

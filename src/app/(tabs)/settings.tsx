@@ -1,5 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { format, parse } from 'date-fns';
+import * as DocumentPicker from 'expo-document-picker';
+import { File } from 'expo-file-system';
 import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,6 +17,7 @@ import {
   toCsv,
   toJson,
 } from '@/domain/data/export';
+import { importCompletionsJson } from '@/domain/data/import';
 import {
   getRemindersEnabled,
   listReminderTargets,
@@ -26,6 +29,7 @@ import {
 import { useLiveTables } from '@/hooks/useLiveTables';
 import { useTheme } from '@/hooks/use-theme';
 import { dateKey } from '@/lib/dates';
+import { hapticSuccess } from '@/lib/haptics';
 
 export default function SettingsScreen() {
   const theme = useTheme();
@@ -67,6 +71,56 @@ export default function SettingsScreen() {
       }
     } catch (err) {
       Alert.alert('Export failed', err instanceof Error ? err.message : 'Something went wrong.');
+    }
+  };
+
+  const handleImport = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/json',
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || result.assets.length === 0) return;
+      const file = new File(result.assets[0].uri);
+      const content = await file.text();
+      Alert.alert(
+        'Import completions?',
+        'This merges completion entries into your history. Existing entries are kept.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Import',
+            onPress: () => {
+              void runImport(content);
+            },
+          },
+        ],
+      );
+    } catch (err) {
+      Alert.alert(
+        'Import failed',
+        err instanceof Error ? err.message : 'The file could not be read.',
+      );
+    }
+  };
+
+  const runImport = async (content: string) => {
+    try {
+      const result = await importCompletionsJson(content);
+      hapticSuccess();
+      const extra =
+        result.unknown > 0
+          ? `\n${result.unknown} entries were skipped because their action doesn't exist here.`
+          : '';
+      Alert.alert(
+        'Import complete',
+        `Imported ${result.imported} completions.${extra}`,
+      );
+    } catch (err) {
+      Alert.alert(
+        'Import failed',
+        err instanceof Error ? err.message : 'Something went wrong.',
+      );
     }
   };
 
@@ -142,6 +196,20 @@ export default function SettingsScreen() {
                   <GhostButton label="Export JSON" onPress={() => void handleExport('json')} />
                 </View>
               </View>
+            </Card>
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="cloud-upload-outline" size={16} color={theme.accent} />
+              <ThemedText type="smallBold">Import data</ThemedText>
+            </View>
+            <Card style={styles.exportCard}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Restore a JSON backup exported from Rutinario. Only entries whose actions already
+                exist here are imported.
+              </ThemedText>
+              <GhostButton label="Import JSON" onPress={() => void handleImport()} />
             </Card>
           </View>
         </ScrollView>

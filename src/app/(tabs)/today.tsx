@@ -2,32 +2,39 @@ import { Ionicons } from '@expo/vector-icons';
 import { addDays, format, subDays } from 'date-fns';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { AppState, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { AppState, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ChecklistItem } from '@/components/dashboard/checklist-item';
+import { EnergyCheckIn } from '@/components/dashboard/energy-checkin';
 import { LevelToggle } from '@/components/dashboard/level-toggle';
 import { ProgressBar } from '@/components/dashboard/progress-bar';
 import { DailyTimeline } from '@/components/dashboard/timeline';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { PrimaryButton } from '@/components/ui/button';
+import { GhostButton, PrimaryButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { formatMinutes } from '@/domain/dashboard/buildDailyPlan';
 import { greetingFor, progressMessage } from '@/domain/dashboard/copy';
 import { toggleCompletion } from '@/domain/dashboard/completions';
-import type { DailyPlan, DailyPlanItem } from '@/domain/dashboard/types';
+import {
+  getEnergyCheckinDate,
+  getStoredEnergyLevel,
+  saveEnergyCheckin,
+} from '@/domain/dashboard/energyCheckin';
+import type { ActiveLevel, DailyPlan, DailyPlanItem } from '@/domain/dashboard/types';
 import {
   TIME_BLOCK_LABELS,
   timeBlockFromDate,
   type TimeBlock,
 } from '@/domain/scheduling/anchors';
 import { useDailyPlan } from '@/hooks/useDailyPlan';
+import { useDayNote } from '@/hooks/useDayNote';
 import { useTheme } from '@/hooks/use-theme';
 import { useUIStore, type TodayView } from '@/stores/uiStore';
 import { dateKey } from '@/lib/dates';
-import { hapticSelection } from '@/lib/haptics';
+import { hapticSelection, hapticSuccess } from '@/lib/haptics';
 
 const BLOCK_OPTIONS: TimeBlock[] = ['morning', 'afternoon', 'night'];
 
@@ -35,6 +42,7 @@ export default function TodayScreen() {
   const [today, setToday] = useState(() => new Date());
   const [viewDate, setViewDate] = useState<Date>(() => new Date());
   const [selectedBlock, setSelectedBlock] = useState<TimeBlock>(() => timeBlockFromDate(today));
+  const [showEnergyCheckIn, setShowEnergyCheckIn] = useState(false);
   const plan = useDailyPlan(viewDate);
   const theme = useTheme();
   const activeLevel = useUIStore((state) => state.activeLevel);
@@ -62,6 +70,30 @@ export default function TodayScreen() {
   }, [today]);
 
   const isViewingToday = dateKey(viewDate) === dateKey(today);
+
+  useEffect(() => {
+    if (!isViewingToday || !plan || plan.items.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      const [storedDate, storedLevel] = await Promise.all([
+        getEnergyCheckinDate(),
+        getStoredEnergyLevel(),
+      ]);
+      if (cancelled) return;
+      if (storedLevel) setActiveLevel(storedLevel);
+      if (storedDate !== dateKey(today)) setShowEnergyCheckIn(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isViewingToday, plan, today, setActiveLevel]);
+
+  const handleEnergySelect = (level: ActiveLevel) => {
+    hapticSuccess();
+    setActiveLevel(level);
+    setShowEnergyCheckIn(false);
+    void saveEnergyCheckin(level, dateKey(today));
+  };
 
   const goToPrevDay = () => setViewDate((prev) => subDays(prev, 1));
   const goToNextDay = () =>
@@ -198,8 +230,16 @@ export default function TodayScreen() {
               Getting things ready…
             </ThemedText>
           )}
+
+          <DayNoteCard date={dateKey(viewDate)} />
         </ScrollView>
       </SafeAreaView>
+
+      <EnergyCheckIn
+        visible={showEnergyCheckIn}
+        onSelect={handleEnergySelect}
+        onClose={() => setShowEnergyCheckIn(false)}
+      />
     </ThemedView>
   );
 }
@@ -346,6 +386,38 @@ function SectionTitle({ children }: { children: string }) {
   );
 }
 
+function DayNoteCard({ date }: { date: string }) {
+  const theme = useTheme();
+  const { note, changeNote, dirty, save } = useDayNote(date);
+
+  return (
+    <View style={styles.section}>
+      <SectionTitle>Day note</SectionTitle>
+      <Card style={styles.noteCard}>
+        <TextInput
+          value={note}
+          onChangeText={changeNote}
+          onBlur={() => {
+            if (dirty) void save();
+          }}
+          multiline
+          placeholder="How was this day? Mood, energy, wins, anything on your mind…"
+          placeholderTextColor={theme.textSecondary}
+          style={[
+            styles.noteInput,
+            { backgroundColor: theme.backgroundSelected, color: theme.text },
+          ]}
+        />
+        {dirty ? (
+          <View style={styles.noteFooter}>
+            <GhostButton label="Save note" onPress={() => void save()} />
+          </View>
+        ) : null}
+      </Card>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -440,5 +512,20 @@ const styles = StyleSheet.create({
   },
   heroTime: {
     marginBottom: 4,
+  },
+  noteCard: {
+    gap: Spacing.two,
+  },
+  noteInput: {
+    minHeight: 72,
+    borderRadius: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlignVertical: 'top',
+  },
+  noteFooter: {
+    alignItems: 'flex-end',
   },
 });
