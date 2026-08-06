@@ -1,15 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Card } from '@/components/ui/card';
 import { ActionSheet, type SheetAction } from '@/components/ui/sheet';
 import { ConfirmSheet, PromptSheet } from '@/components/ui/prompt';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import {
   createWorkout,
   deleteWorkout,
@@ -17,11 +15,7 @@ import {
   renameWorkout,
   summarizeDay,
 } from '@/domain/workouts/workouts';
-import {
-  getTodayWorkout,
-  weekdayLabelShort,
-  type TodaySlot,
-} from '@/domain/workouts/schedule';
+import { getTodayWorkout, type TodaySlot } from '@/domain/workouts/schedule';
 import type { WorkoutSummary } from '@/domain/workouts/types';
 import { useLiveTables } from '@/hooks/useLiveTables';
 import { useTheme } from '@/hooks/use-theme';
@@ -31,7 +25,7 @@ type MenuTarget = {
   name: string;
 };
 
-export default function WorkoutScreen() {
+export function WorkoutSection() {
   const theme = useTheme();
   const [workouts, setWorkouts] = useState<WorkoutSummary[] | null>(null);
   const [today, setToday] = useState<TodaySlot | null>(null);
@@ -100,91 +94,70 @@ export default function WorkoutScreen() {
     : [];
 
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView edges={['top']} style={styles.safeArea}>
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          showsVerticalScrollIndicator={false}>
-          <View style={styles.header}>
-            <View style={styles.headerText}>
-              <ThemedText type="title" style={styles.title}>
-                Workout
-              </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                Your training split, one tap away
-              </ThemedText>
-            </View>
-            <Pressable onPress={handleNewWorkout} hitSlop={8} style={styles.headerButton}>
-              <Ionicons name="add" size={26} color={theme.accent} />
-            </Pressable>
-          </View>
+    <View style={styles.section}>
+      <View style={styles.header}>
+        <View style={styles.headerText}>
+          <ThemedText type="smallBold">Workout</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            Your training split
+          </ThemedText>
+        </View>
+        <Pressable onPress={handleNewWorkout} hitSlop={8} style={styles.headerButton}>
+          <Ionicons name="add-circle-outline" size={22} color={theme.accent} />
+        </Pressable>
+      </View>
 
-          {today ? <TodayCard today={today} /> : null}
+      {today ? <TodayCard today={today} /> : null}
 
-          {workouts !== null && workouts.length === 0 ? (
-            <Card style={styles.emptyCard}>
-              <ThemedText type="smallBold">No workouts yet</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                Tap + to create your first split. Add days like Push / Pull / Legs and pin them
-                to the weekday they happen. Training days show up here automatically.
-              </ThemedText>
-            </Card>
-          ) : null}
+      {workouts !== null && workouts.length === 0 ? (
+        <Card style={styles.emptyCard}>
+          <ThemedText type="small">No workouts yet — tap + to create your first split.</ThemedText>
+        </Card>
+      ) : null}
 
-          {workouts?.map((workout) => {
-            const dayChips = workout.days
-              .map((day) => ({
-                id: day.id,
-                label: weekdayLabelShort(day.weekday) ?? day.name,
-              }))
-              .filter((chip) => chip.label.length > 0);
-            return (
-              <Pressable
-                key={workout.id}
-                onPress={() =>
-                  router.push({
-                    pathname: '/workout/[id]',
-                    params: { id: String(workout.id) },
-                  })
-                }
-                onLongPress={() => setMenuTarget({ id: workout.id, name: workout.name })}
-                delayLongPress={300}>
-                {({ pressed }) => (
-                  <Card style={[styles.workoutCard, pressed && { opacity: 0.6 }]}>
-                    <View style={styles.workoutRow}>
-                      <View style={styles.workoutText}>
-                        <ThemedText type="smallBold">{workout.name}</ThemedText>
-                        <ThemedText type="small" themeColor="textSecondary">
-                          {workout.days.length} day{workout.days.length === 1 ? '' : 's'}
-                        </ThemedText>
+      {workouts?.map((workout) => {
+        const dayChips = workout.days.map((day) => ({
+          id: day.id,
+          label: weekdayShort(day.weekday, day.name),
+        }));
+        return (
+          <Pressable
+            key={workout.id}
+            onPress={() =>
+              router.push({
+                pathname: '/workout/[id]',
+                params: { id: String(workout.id) },
+              })
+            }
+            onLongPress={() => setMenuTarget({ id: workout.id, name: workout.name })}
+            delayLongPress={300}>
+            {({ pressed }) => (
+              <Card style={[styles.workoutCard, pressed && { opacity: 0.6 }]}>
+                <View style={styles.workoutRow}>
+                  <View style={styles.workoutText}>
+                    <ThemedText type="smallBold">{workout.name}</ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {workout.days.length} day{workout.days.length === 1 ? '' : 's'}
+                    </ThemedText>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+                </View>
+                {dayChips.length > 0 ? (
+                  <View style={styles.dayChips}>
+                    {dayChips.map((chip) => (
+                      <View
+                        key={chip.id}
+                        style={[styles.dayChip, { backgroundColor: theme.backgroundSelected }]}>
+                        <ThemedText type="small">{chip.label}</ThemedText>
                       </View>
-                      <Ionicons
-                        name="chevron-forward"
-                        size={18}
-                        color={theme.textSecondary}
-                      />
-                    </View>
-                    {dayChips.length > 0 ? (
-                      <View style={styles.dayChips}>
-                        {dayChips.map((chip) => (
-                          <View
-                            key={chip.id}
-                            style={[
-                              styles.dayChip,
-                              { backgroundColor: theme.backgroundSelected },
-                            ]}>
-                            <ThemedText type="small">{chip.label}</ThemedText>
-                          </View>
-                        ))}
-                      </View>
-                    ) : null}
-                  </Card>
-                )}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      </SafeAreaView>
+                    ))}
+                  </View>
+                ) : null}
+              </Card>
+            )}
+          </Pressable>
+        );
+      })}
 
       <ActionSheet
         visible={menuTarget !== null}
@@ -221,8 +194,15 @@ export default function WorkoutScreen() {
           onClose={() => setConfirm(null)}
         />
       ) : null}
-    </ThemedView>
+    </View>
   );
+}
+
+const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function weekdayShort(weekday: number | null, fallback: string): string {
+  if (weekday === null || weekday < 0 || weekday > 6) return fallback;
+  return WEEKDAY_SHORT[weekday];
 }
 
 function TodayCard({ today }: { today: TodaySlot }) {
@@ -239,7 +219,7 @@ function TodayCard({ today }: { today: TodaySlot }) {
       <ThemedText type="small" themeColor="textSecondary" style={styles.todayEyebrow}>
         {today.workout.name} · Today
       </ThemedText>
-      <ThemedText type="title" style={styles.todayTitle}>
+      <ThemedText type="smallBold" style={styles.todayTitle}>
         {today.day.name}
       </ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
@@ -265,34 +245,17 @@ function TodayCard({ today }: { today: TodaySlot }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  safeArea: {
-    flex: 1,
-    paddingBottom: BottomTabInset,
-  },
-  scroll: {
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.three,
-    paddingBottom: Spacing.four,
-    gap: Spacing.three,
-    maxWidth: MaxContentWidth,
-    alignSelf: 'center',
-    width: '100%',
+  section: {
+    gap: Spacing.two,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginTop: Spacing.two,
   },
   headerText: {
-    flex: 1,
     gap: Spacing.half,
-  },
-  title: {
-    fontSize: 32,
-    lineHeight: 38,
   },
   headerButton: {
     padding: Spacing.one,
@@ -306,19 +269,17 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   todayTitle: {
-    fontSize: 24,
-    lineHeight: 30,
+    fontSize: 18,
   },
   startButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: Spacing.three,
+    paddingVertical: Spacing.two,
     borderRadius: Spacing.three,
     marginTop: Spacing.two,
   },
   emptyCard: {
     padding: Spacing.three,
-    gap: Spacing.one,
   },
   workoutCard: {
     padding: Spacing.three,

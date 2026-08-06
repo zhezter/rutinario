@@ -25,6 +25,7 @@ import { domainColor } from '@/lib/domainColor';
 import { ActionSheet, type SheetAction } from '@/components/ui/sheet';
 import { PromptSheet, ConfirmSheet } from '@/components/ui/prompt';
 import { RoutineFormSheet, type RoutineFormResult } from '@/components/forms/routine-form';
+import { WorkoutSection } from '@/components/workout/workout-section';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 
 type PromptState = {
@@ -234,6 +235,8 @@ export default function RoutinesScreen() {
               </Pressable>
             </View>
           </View>
+
+          <WorkoutSection />
 
           {hierarchy?.map((domain) => (
             <DomainBlock
