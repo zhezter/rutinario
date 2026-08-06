@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useState } from 'react';
+import { addDays, subDays } from 'date-fns';
+import { useState, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,12 +9,19 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Card } from '@/components/ui/card';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { getStatsSnapshot, type DomainStat, type StatsSnapshot } from '@/domain/dashboard/stats';
+import {
+  getStatsSnapshot,
+  type CalendarDay,
+  type DomainStat,
+  type StatsSnapshot,
+} from '@/domain/dashboard/stats';
 import { useLiveTables } from '@/hooks/useLiveTables';
 import { useTheme } from '@/hooks/use-theme';
+import { dateKey } from '@/lib/dates';
 import { domainColor } from '@/lib/domainColor';
 
 const BAR_AREA_HEIGHT = 110;
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default function StatsScreen() {
   const theme = useTheme();
@@ -91,6 +99,13 @@ export default function StatsScreen() {
               </View>
 
               <View style={styles.section}>
+                <SectionTitle>Recent weeks</SectionTitle>
+                <Card>
+                  <CalendarHeatmap calendar={stats.calendar} />
+                </Card>
+              </View>
+
+              <View style={styles.section}>
                 <SectionTitle>By domain</SectionTitle>
                 <Card style={styles.domainsCard}>
                   {stats.domains.length === 0 ? (
@@ -145,6 +160,101 @@ function StreakHero({ streak, weekCompleted }: { streak: number; weekCompleted: 
   );
 }
 
+function CalendarHeatmap({ calendar }: { calendar: CalendarDay[] }) {
+  const theme = useTheme();
+  if (calendar.length === 0) return null;
+
+  const [y, m, d] = calendar[0].date.split('-').map(Number);
+  const oldestDate = new Date(y, m - 1, d);
+  const gridStart = subDays(oldestDate, oldestDate.getDay());
+  const lastDate = calendar.at(-1)!;
+  const [ly, lm, ld] = lastDate.date.split('-').map(Number);
+  const todayDate = new Date(ly, lm - 1, ld);
+  const spanDays = Math.round((todayDate.getTime() - gridStart.getTime()) / 86_400_000);
+  const weekCount = Math.ceil((spanDays + 1) / 7);
+  const pctByDate = new Map(calendar.map((day) => [day.date, day.pct]));
+
+  const weeks: { date: string; pct: number; isToday: boolean }[][] = [];
+  for (let w = 0; w < weekCount; w += 1) {
+    const column: { date: string; pct: number; isToday: boolean }[] = [];
+    for (let dow = 0; dow < 7; dow += 1) {
+      const day = addDays(gridStart, w * 7 + dow);
+      const key = dateKey(day);
+      column.push({
+        date: key,
+        pct: pctByDate.get(key) ?? 0,
+        isToday: key === lastDate.date,
+      });
+    }
+    weeks.push(column);
+  }
+
+  return (
+    <View style={styles.heatmap}>
+      <View style={styles.heatmapRow}>
+        <View style={styles.heatmapLabels}>
+          {WEEKDAY_LABELS.map((label, dow) => (
+            <ThemedText key={label} type="small" style={styles.heatmapLabel}>
+              {label.slice(0, 2)}
+            </ThemedText>
+          ))}
+        </View>
+        <View style={styles.heatmapGrid}>
+          {weeks.map((column, w) => (
+            <View key={w} style={styles.heatmapColumn}>
+              {column.map((day) => (
+                <View
+                  key={day.date}
+                  style={[
+                    styles.heatmapCell,
+                    {
+                      backgroundColor: heatColor(day.pct, theme.accent, theme.backgroundSelected),
+                      borderWidth: day.isToday ? 1 : 0,
+                      borderColor: day.isToday ? theme.accent : 'transparent',
+                    },
+                  ]}
+                />
+              ))}
+            </View>
+          ))}
+        </View>
+      </View>
+      <View style={styles.legendRow}>
+        <ThemedText type="small" themeColor="textSecondary">
+          Less
+        </ThemedText>
+        {[0, 25, 50, 75, 100].map((pct) => (
+          <View
+            key={pct}
+            style={[
+              styles.legendCell,
+              { backgroundColor: heatColor(pct, theme.accent, theme.backgroundSelected) },
+            ]}
+          />
+        ))}
+        <ThemedText type="small" themeColor="textSecondary">
+          More
+        </ThemedText>
+      </View>
+    </View>
+  );
+}
+
+function heatColor(pct: number, accent: string, empty: string): string {
+  if (pct <= 0) return empty;
+  if (pct < 50) return accentWithOpacity(accent, 0.35);
+  if (pct < 100) return accentWithOpacity(accent, 0.65);
+  return accent;
+}
+
+function accentWithOpacity(hex: string, opacity: number): string {
+  const value = hex.replace('#', '');
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
 function DomainRow({ domain }: { domain: DomainStat }) {
   return (
     <View style={styles.domainRow}>
@@ -162,7 +272,7 @@ function DomainRow({ domain }: { domain: DomainStat }) {
   );
 }
 
-function SectionTitle({ children }: { children: string }) {
+function SectionTitle({ children }: { children: ReactNode }) {
   return (
     <ThemedText type="smallBold" style={styles.sectionTitle}>
       {children}
@@ -256,5 +366,45 @@ const styles = StyleSheet.create({
   },
   domainName: {
     flex: 1,
+  },
+  heatmap: {
+    gap: Spacing.two,
+  },
+  heatmapRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  heatmapLabels: {
+    gap: 4,
+  },
+  heatmapLabel: {
+    fontSize: 10,
+    lineHeight: 16,
+    width: 20,
+    textAlign: 'center',
+  },
+  heatmapGrid: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 4,
+  },
+  heatmapColumn: {
+    flex: 1,
+    gap: 4,
+  },
+  heatmapCell: {
+    aspectRatio: 1,
+    borderRadius: 4,
+  },
+  legendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+  },
+  legendCell: {
+    width: 12,
+    height: 12,
+    borderRadius: 3,
   },
 });

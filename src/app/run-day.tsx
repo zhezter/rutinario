@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,96 +10,71 @@ import { ThemedView } from '@/components/themed-view';
 import { GhostButton, PrimaryButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { formatMinutes } from '@/domain/dashboard/buildDailyPlan';
 import { setCompleted, setNotCompleted } from '@/domain/dashboard/completions';
-import { useActionCompletions } from '@/hooks/useActionCompletions';
-import { useRoutine } from '@/hooks/useRoutine';
+import { TIME_BLOCK_LABELS, TIME_BLOCK_ORDER } from '@/domain/scheduling/anchors';
+import type { DailyPlanItem } from '@/domain/dashboard/types';
+import { useDailyPlan } from '@/hooks/useDailyPlan';
 import { useTheme } from '@/hooks/use-theme';
 import { hapticSelection, hapticSuccess, hapticWarning } from '@/lib/haptics';
 
-type ExecStep = {
-  actionId: number;
-  name: string;
-  description: string | null;
-  instructions: string | null;
-  product: string | null;
-  durationMin: number | null;
-  procedureName: string;
-};
-
-export default function ExecuteRoutineScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const routine = useRoutine(Number(id));
+export default function RunDayScreen() {
   const [today] = useState(() => new Date());
+  const plan = useDailyPlan(today);
 
-  const steps = useMemo<ExecStep[]>(
-    () =>
-      (routine?.procedures ?? []).flatMap((procedure) =>
-        procedure.actions.map((action) => ({
-          actionId: action.id,
-          name: action.name,
-          description: action.description,
-          instructions: action.instructions,
-          product: action.product,
-          durationMin: action.durationMin,
-          procedureName: procedure.name,
-        })),
-      ),
-    [routine],
-  );
+  const steps = useMemo<DailyPlanItem[]>(() => {
+    if (!plan) return [];
+    const order = new Map(TIME_BLOCK_ORDER.map((block, index) => [block, index]));
+    return [...plan.items].sort((a, b) => {
+      const blockDiff = (order.get(a.timeBlock) ?? 99) - (order.get(b.timeBlock) ?? 99);
+      if (blockDiff !== 0) return blockDiff;
+      return (a.fixedTime ?? '').localeCompare(b.fixedTime ?? '');
+    });
+  }, [plan]);
 
-  const { loaded, completed } = useActionCompletions(
-    steps.map((step) => step.actionId),
-    today,
+  const completed = useMemo(
+    () => new Set(steps.filter((step) => step.completed).map((step) => step.actionId)),
+    [steps],
   );
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const initializedRef = useRef(false);
 
   useEffect(() => {
-    if (!loaded || steps.length === 0 || initializedRef.current) return;
+    if (steps.length === 0 || initializedRef.current) return;
     const firstPending = steps.findIndex((step) => !completed.has(step.actionId));
     setCurrentIndex(firstPending === -1 ? 0 : firstPending);
     initializedRef.current = true;
-  }, [loaded, steps, completed]);
-
-  if (!routine) {
-    return (
-      <ThemedView style={styles.container}>
-        <Stack.Screen options={{ title: 'Execute' }} />
-        <ThemedText type="small" themeColor="textSecondary">
-          Getting things ready…
-        </ThemedText>
-      </ThemedView>
-    );
-  }
+  }, [steps, completed]);
 
   const doneCount = steps.filter((step) => completed.has(step.actionId)).length;
   const allDone = steps.length > 0 && doneCount === steps.length;
 
   return (
     <ThemedView style={styles.container}>
-      <Stack.Screen options={{ title: routine.name }} />
+      <Stack.Screen options={{ title: "Today's plan" }} />
       <SafeAreaView edges={['top']} style={styles.safeArea}>
-        {steps.length === 0 ? (
+        {!plan ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            Getting things ready…
+          </ThemedText>
+        ) : steps.length === 0 ? (
           <View style={styles.empty}>
-            <ThemedText type="subtitle">No steps yet</ThemedText>
+            <ThemedText type="subtitle">Nothing scheduled</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              Add steps to this routine to guide it step by step.
+              There is nothing on your plan today. Enjoy the day.
             </ThemedText>
             <GhostButton label="Back" onPress={() => router.back()} />
           </View>
         ) : allDone ? (
-          <CompletionView
-            routineName={routine.name}
-            onFinish={() => router.back()}
-            onGoToToday={() => router.dismissTo('/today')}
-          />
+          <CompletionView onFinish={() => router.back()} onGoToToday={() => router.dismissTo('/today')} />
         ) : (
           <Executor
             steps={steps}
             completed={completed}
             currentIndex={currentIndex}
             doneCount={doneCount}
+            plannedMinutes={plan.plannedMinutes}
             onDone={() => {
               hapticSuccess();
               void setCompleted(steps[currentIndex].actionId, today);
@@ -123,7 +98,7 @@ export default function ExecuteRoutineScreen() {
 
   function advancePending() {
     const from = Math.min(currentIndex, steps.length - 1);
-    for (let i = from + 1; i < steps.length; i++) {
+    for (let i = from + 1; i < steps.length; i += 1) {
       if (!completed.has(steps[i].actionId)) {
         setCurrentIndex(i);
         return;
@@ -138,6 +113,7 @@ function Executor({
   completed,
   currentIndex,
   doneCount,
+  plannedMinutes,
   onDone,
   onUndo,
   onSkip,
@@ -145,10 +121,11 @@ function Executor({
   onPrevious,
   onNext,
 }: {
-  steps: ExecStep[];
-  completed: Map<number, number>;
+  steps: DailyPlanItem[];
+  completed: Set<number>;
   currentIndex: number;
   doneCount: number;
+  plannedMinutes: number;
   onDone: () => void;
   onUndo: () => void;
   onSkip: () => void;
@@ -161,6 +138,13 @@ function Executor({
   const current = steps[safeIndex];
   const isCompleted = completed.has(current.actionId);
 
+  const metaParts = [
+    current.durationMin != null ? `${current.durationMin} min` : null,
+    current.fixedTime ?? null,
+    current.anchor ?? null,
+    current.frequency,
+  ].filter((part): part is string => part !== null && part !== '');
+
   return (
     <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
       <Card style={styles.progressCard}>
@@ -169,7 +153,7 @@ function Executor({
             {doneCount}/{steps.length}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            steps done
+            done · {formatMinutes(plannedMinutes)} planned
           </ThemedText>
         </View>
         <ProgressBar
@@ -180,26 +164,31 @@ function Executor({
       </Card>
 
       <Card style={styles.focusCard}>
-        <ThemedText type="small" themeColor="textSecondary">
-          {current.procedureName}
-        </ThemedText>
+        <View style={styles.focusMetaRow}>
+          <View style={[styles.blockChip, { backgroundColor: theme.backgroundSelected }]}>
+            <ThemedText type="small" style={styles.blockChipText}>
+              {TIME_BLOCK_LABELS[current.timeBlock]}
+            </ThemedText>
+          </View>
+          <ThemedText type="small" themeColor="textSecondary">
+            {current.domainName} · {current.routineName}
+          </ThemedText>
+        </View>
         <ThemedText type="subtitle">{current.name}</ThemedText>
         {current.description ? (
           <ThemedText type="small" themeColor="textSecondary">
             {current.description}
           </ThemedText>
         ) : null}
-        {current.durationMin != null || current.product ? (
+        {metaParts.length > 0 ? (
           <ThemedText type="small" themeColor="textSecondary">
-            {[current.durationMin ? `${current.durationMin} min` : null, current.product]
-              .filter((part): part is string => part !== null)
-              .join(' · ')}
+            {metaParts.join(' · ')}
           </ThemedText>
         ) : null}
-        {current.instructions ? (
-          <View style={[styles.instructionsBox, { backgroundColor: theme.backgroundSelected }]}>
-            <ThemedText type="smallBold">Instructions</ThemedText>
-            <ThemedText type="small">{current.instructions}</ThemedText>
+        {current.product ? (
+          <View style={[styles.productBox, { backgroundColor: theme.backgroundSelected }]}>
+            <Ionicons name="cube-outline" size={16} color={theme.textSecondary} />
+            <ThemedText type="small">{current.product}</ThemedText>
           </View>
         ) : null}
       </Card>
@@ -248,11 +237,13 @@ function Executor({
               <View style={styles.stepBody}>
                 <ThemedText
                   type="smallBold"
-                  style={stepDone && { textDecorationLine: 'line-through', color: theme.textSecondary }}>
+                  style={
+                    stepDone && { textDecorationLine: 'line-through', color: theme.textSecondary }
+                  }>
                   {index + 1}. {step.name}
                 </ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
-                  {step.procedureName}
+                  {TIME_BLOCK_LABELS[step.timeBlock]} · {step.routineName}
                 </ThemedText>
               </View>
               <Ionicons
@@ -268,15 +259,7 @@ function Executor({
   );
 }
 
-function CompletionView({
-  routineName,
-  onFinish,
-  onGoToToday,
-}: {
-  routineName: string;
-  onFinish: () => void;
-  onGoToToday: () => void;
-}) {
+function CompletionView({ onFinish, onGoToToday }: { onFinish: () => void; onGoToToday: () => void }) {
   const theme = useTheme();
   return (
     <View style={styles.complete}>
@@ -284,14 +267,14 @@ function CompletionView({
         <Ionicons name="checkmark" size={44} color={theme.background} />
       </View>
       <ThemedText type="subtitle" style={styles.completeTitle}>
-        Routine complete
+        Day complete
       </ThemedText>
       <ThemedText type="small" themeColor="textSecondary" style={styles.completeText}>
-        {routineName} — every step done. Nice work.
+        Every task in your plan is done. Nice work.
       </ThemedText>
       <View style={styles.completeButtons}>
-        <PrimaryButton label="Back to routine" onPress={onFinish} />
-        <GhostButton label="Go to Today" onPress={onGoToToday} />
+        <PrimaryButton label="Back to Today" onPress={onFinish} />
+        <GhostButton label="Go to Stats" onPress={() => router.dismissTo('/stats')} />
       </View>
     </View>
   );
@@ -329,11 +312,28 @@ const styles = StyleSheet.create({
   focusCard: {
     gap: Spacing.two,
   },
-  instructionsBox: {
+  focusMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    flexWrap: 'wrap',
+  },
+  blockChip: {
+    borderRadius: 999,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: 2,
+  },
+  blockChipText: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: 700,
+  },
+  productBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
     borderRadius: Spacing.two,
     padding: Spacing.three,
-    gap: Spacing.one,
-    marginTop: Spacing.one,
   },
   controls: {
     gap: Spacing.two,

@@ -5,11 +5,20 @@ import { db } from '@/db/client';
 import { actions, completions, domains, procedures, routines, systems } from '@/db/schema';
 import { dateKey } from '@/lib/dates';
 
+const WEEK_WINDOW = 6;
+const CALENDAR_WINDOW = 55;
+
 export type DayStat = {
   date: string;
   label: string;
   completed: number;
   expected: number;
+  pct: number;
+  isToday: boolean;
+};
+
+export type CalendarDay = {
+  date: string;
   pct: number;
   isToday: boolean;
 };
@@ -25,6 +34,7 @@ export type StatsSnapshot = {
   streak: number;
   weekCompleted: number;
   days: DayStat[];
+  calendar: CalendarDay[];
   domains: DomainStat[];
 };
 
@@ -48,12 +58,13 @@ async function loadDomainByAction(): Promise<Map<number, string>> {
 }
 
 export async function getStatsSnapshot(today = new Date()): Promise<StatsSnapshot> {
-  const startKey = dateKey(subDays(today, 6));
+  const weekStartKey = dateKey(subDays(today, WEEK_WINDOW));
+  const calendarStartKey = dateKey(subDays(today, CALENDAR_WINDOW));
 
   const [dailyIds, domainByAction, comps] = await Promise.all([
     loadDailyActionIds(),
     loadDomainByAction(),
-    db.select().from(completions).where(gte(completions.date, startKey)),
+    db.select().from(completions).where(gte(completions.date, calendarStartKey)),
   ]);
 
   const compDates = new Set<string>();
@@ -75,21 +86,31 @@ export async function getStatsSnapshot(today = new Date()): Promise<StatsSnapsho
   }
 
   const expectedTotal = dailyIds.size;
+  const pctFor = (date: Date) => {
+    const completed = compsByDate.get(dateKey(date))?.length ?? 0;
+    return expectedTotal > 0 ? Math.min(100, Math.round((completed / expectedTotal) * 100)) : 0;
+  };
+
   const days: DayStat[] = [];
-  for (let i = 6; i >= 0; i -= 1) {
+  for (let i = WEEK_WINDOW; i >= 0; i -= 1) {
     const d = subDays(today, i);
-    const key = dateKey(d);
-    const completed = compsByDate.get(key)?.length ?? 0;
-    const pct = expectedTotal > 0 ? Math.min(100, Math.round((completed / expectedTotal) * 100)) : 0;
     days.push({
-      date: key,
+      date: dateKey(d),
       label: format(d, 'EEE'),
-      completed,
+      completed: compsByDate.get(dateKey(d))?.length ?? 0,
       expected: expectedTotal,
-      pct,
+      pct: pctFor(d),
       isToday: i === 0,
     });
   }
+
+  const calendar: CalendarDay[] = [];
+  for (let i = CALENDAR_WINDOW; i >= 0; i -= 1) {
+    const d = subDays(today, i);
+    calendar.push({ date: dateKey(d), pct: pctFor(d), isToday: i === 0 });
+  }
+
+  const weekCompleted = comps.filter((c) => c.date >= weekStartKey).length;
 
   const domainAgg = new Map<string, { completed: number; expected: number }>();
   for (const [actionId, domainName] of domainByAction) {
@@ -98,7 +119,8 @@ export async function getStatsSnapshot(today = new Date()): Promise<StatsSnapsho
     agg.expected += 1;
     domainAgg.set(domainName, agg);
   }
-  for (const ids of compsByDate.values()) {
+  for (const [date, ids] of compsByDate) {
+    if (date < weekStartKey) continue;
     for (const actionId of ids) {
       const domainName = domainByAction.get(actionId);
       if (!domainName) continue;
@@ -118,8 +140,9 @@ export async function getStatsSnapshot(today = new Date()): Promise<StatsSnapsho
 
   return {
     streak,
-    weekCompleted: comps.length,
+    weekCompleted,
     days,
+    calendar,
     domains: domainStats,
   };
 }

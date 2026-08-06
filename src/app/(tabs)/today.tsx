@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { format } from 'date-fns';
+import { addDays, format, subDays } from 'date-fns';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { AppState, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +11,7 @@ import { ProgressBar } from '@/components/dashboard/progress-bar';
 import { DailyTimeline } from '@/components/dashboard/timeline';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { PrimaryButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { formatMinutes } from '@/domain/dashboard/buildDailyPlan';
@@ -25,13 +27,15 @@ import { useDailyPlan } from '@/hooks/useDailyPlan';
 import { useTheme } from '@/hooks/use-theme';
 import { useUIStore, type TodayView } from '@/stores/uiStore';
 import { dateKey } from '@/lib/dates';
+import { hapticSelection } from '@/lib/haptics';
 
 const BLOCK_OPTIONS: TimeBlock[] = ['morning', 'afternoon', 'night'];
 
 export default function TodayScreen() {
   const [today, setToday] = useState(() => new Date());
+  const [viewDate, setViewDate] = useState<Date>(() => new Date());
   const [selectedBlock, setSelectedBlock] = useState<TimeBlock>(() => timeBlockFromDate(today));
-  const plan = useDailyPlan(today);
+  const plan = useDailyPlan(viewDate);
   const activeLevel = useUIStore((state) => state.activeLevel);
   const setActiveLevel = useUIStore((state) => state.setActiveLevel);
   const todayView = useUIStore((state) => state.todayView);
@@ -42,6 +46,7 @@ export default function TodayScreen() {
       const now = new Date();
       if (dateKey(now) !== dateKey(today)) {
         setToday(now);
+        setViewDate(now);
         setSelectedBlock(timeBlockFromDate(now));
       }
     };
@@ -55,11 +60,17 @@ export default function TodayScreen() {
     };
   }, [today]);
 
-  const handleToggle = (item: DailyPlanItem) => {
-    void toggleCompletion(item.actionId, today, item.completed);
-  };
+  const isViewingToday = dateKey(viewDate) === dateKey(today);
 
-  const dateLabel = format(today, 'EEEE, MMMM d');
+  const goToPrevDay = () => setViewDate((prev) => subDays(prev, 1));
+  const goToNextDay = () =>
+    setViewDate((prev) => (dateKey(prev) === dateKey(today) ? prev : addDays(prev, 1)));
+  const goToToday = () => setViewDate(today);
+
+  const handleToggle = (item: DailyPlanItem) => {
+    hapticSelection();
+    void toggleCompletion(item.actionId, viewDate, item.completed);
+  };
 
   const blockItems = plan?.items.filter((item) => item.timeBlock === selectedBlock) ?? [];
   const flexibleItems = plan?.items.filter((item) => item.timeBlock === 'flexible') ?? [];
@@ -75,9 +86,18 @@ export default function TodayScreen() {
               <ThemedText type="title" style={styles.greeting}>
                 {greetingFor(today)}
               </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                {dateLabel}
-              </ThemedText>
+              <View style={styles.dateRow}>
+                <DateChevron icon="chevron-back" onPress={goToPrevDay} />
+                <Pressable onPress={isViewingToday ? undefined : goToToday} disabled={isViewingToday}>
+                  <ThemedText
+                    type="small"
+                    themeColor={isViewingToday ? 'textSecondary' : 'accent'}>
+                    {format(viewDate, 'EEEE, MMMM d')}
+                    {!isViewingToday ? ' · back to today' : ''}
+                  </ThemedText>
+                </Pressable>
+                <DateChevron icon="chevron-forward" onPress={goToNextDay} disabled={isViewingToday} />
+              </View>
             </View>
             <LevelToggle value={activeLevel} onChange={setActiveLevel} />
           </View>
@@ -85,6 +105,10 @@ export default function TodayScreen() {
           {plan ? (
             <>
               <PlanHero plan={plan} />
+
+              {isViewingToday && plan.items.length > 0 ? (
+                <PrimaryButton label="Run today's plan" onPress={() => router.push('/run-day')} />
+              ) : null}
 
               <BlockSelector value={selectedBlock} onChange={setSelectedBlock} />
 
@@ -132,6 +156,32 @@ export default function TodayScreen() {
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
+  );
+}
+
+function DateChevron({
+  icon,
+  onPress,
+  disabled,
+}: {
+  icon: 'chevron-back' | 'chevron-forward';
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={10}
+      style={({ pressed }) => [
+        styles.dateChevron,
+        { backgroundColor: theme.backgroundSelected },
+        disabled && { opacity: 0.3 },
+        pressed && !disabled && { opacity: 0.7 },
+      ]}>
+      <Ionicons name={icon} size={16} color={theme.text} />
+    </Pressable>
   );
 }
 
@@ -276,6 +326,19 @@ const styles = StyleSheet.create({
   },
   headerText: {
     flex: 1,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    marginTop: 2,
+  },
+  dateChevron: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   greeting: {
     fontSize: 32,

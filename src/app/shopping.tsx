@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,17 +10,46 @@ import { GhostButton, PrimaryButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { finishShopping } from '@/domain/crud/inventory';
+import { useDailyPlan } from '@/hooks/useDailyPlan';
 import { useInventory, type InventoryRow } from '@/hooks/useInventory';
 import { useTheme } from '@/hooks/use-theme';
+import { hapticSelection, hapticSuccess } from '@/lib/haptics';
 
 export default function ShoppingScreen() {
   const items = useInventory();
-  const lowItems = items.filter((item) => item.lowStock === 1);
+  const [today] = useState(() => new Date());
+  const plan = useDailyPlan(today);
+
+  const neededNames = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of plan?.items ?? []) {
+      if (!item.product) continue;
+      for (const token of item.product.split(',')) {
+        const t = token.trim().toLowerCase();
+        if (t) set.add(t);
+      }
+    }
+    return set;
+  }, [plan]);
+
+  const lowItems = useMemo(
+    () =>
+      items
+        .filter((item) => item.lowStock === 1)
+        .sort((a, b) => {
+          const an = neededNames.has(a.name.trim().toLowerCase()) ? 0 : 1;
+          const bn = neededNames.has(b.name.trim().toLowerCase()) ? 0 : 1;
+          if (an !== bn) return an - bn;
+          return a.name.localeCompare(b.name);
+        }),
+    [items, neededNames],
+  );
 
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [finished, setFinished] = useState(false);
 
   const toggle = (id: number) => {
+    hapticSelection();
     setChecked((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -33,6 +62,7 @@ export default function ShoppingScreen() {
   };
 
   const handleFinish = () => {
+    hapticSuccess();
     void (async () => {
       await finishShopping([...checked]);
       setFinished(true);
@@ -71,7 +101,13 @@ export default function ShoppingScreen() {
 
             <Card style={styles.listCard}>
               {lowItems.map((item) => (
-                <ShoppingRow key={item.id} item={item} checked={checked.has(item.id)} onToggle={toggle} />
+                <ShoppingRow
+                  key={item.id}
+                  item={item}
+                  checked={checked.has(item.id)}
+                  needed={neededNames.has(item.name.trim().toLowerCase())}
+                  onToggle={toggle}
+                />
               ))}
             </Card>
 
@@ -93,10 +129,12 @@ export default function ShoppingScreen() {
 function ShoppingRow({
   item,
   checked,
+  needed,
   onToggle,
 }: {
   item: InventoryRow;
   checked: boolean;
+  needed: boolean;
   onToggle: (id: number) => void;
 }) {
   const theme = useTheme();
@@ -120,11 +158,23 @@ function ShoppingRow({
         )}
       </View>
       <View style={styles.nameBlock}>
-        <ThemedText
-          type="smallBold"
-          style={checked && { textDecorationLine: 'line-through', color: theme.textSecondary }}>
-          {item.name}
-        </ThemedText>
+        <View style={styles.nameRow}>
+          <ThemedText
+            type="smallBold"
+            style={[
+              styles.itemName,
+              checked && { textDecorationLine: 'line-through', color: theme.textSecondary },
+            ]}>
+            {item.name}
+          </ThemedText>
+          {needed && (
+            <View style={[styles.neededBadge, { backgroundColor: theme.success }]}>
+              <ThemedText type="small" style={styles.neededText} themeColor="background">
+                Needed today
+              </ThemedText>
+            </View>
+          )}
+        </View>
         <ThemedText type="small" themeColor="textSecondary">
           {item.category}
         </ThemedText>
@@ -209,6 +259,25 @@ const styles = StyleSheet.create({
   nameBlock: {
     flex: 1,
     gap: 1,
+  },
+  itemName: {
+    flex: 1,
+    flexShrink: 1,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  neededBadge: {
+    borderRadius: 999,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: 2,
+  },
+  neededText: {
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: 700,
   },
   empty: {
     flex: 1,
