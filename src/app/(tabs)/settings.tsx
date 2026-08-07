@@ -3,13 +3,14 @@ import { format, parse } from 'date-fns';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { GhostButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { TimeField } from '@/components/ui/time-field';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import {
   buildCompletionsExport,
@@ -32,8 +33,6 @@ import { useLiveTables } from '@/hooks/useLiveTables';
 import { useTheme } from '@/hooks/use-theme';
 import { dateKey } from '@/lib/dates';
 import { hapticSuccess } from '@/lib/haptics';
-
-const CLOSE_TIME_OPTIONS = ['20:00', '21:00', '22:00', '23:00'];
 
 type CloseReminderState = { enabled: boolean; time: string };
 
@@ -178,7 +177,7 @@ export default function SettingsScreen() {
                 <View style={styles.rowText}>
                   <ThemedText type="smallBold">Daily reminders</ThemedText>
                   <ThemedText type="small" themeColor="textSecondary">
-                    Notify at the set time of fixed-time tasks with a daily frequency.
+                    Each step can have its own reminder. Enable them in a routine and set a time.
                   </ThemedText>
                 </View>
                 <Switch
@@ -193,7 +192,7 @@ export default function SettingsScreen() {
                 <View style={styles.targets}>
                   {targets.length === 0 ? (
                     <ThemedText type="small" themeColor="textSecondary">
-                      No fixed-time daily tasks yet. Add one in a routine to get reminders.
+                      No steps have reminders yet. Open a routine and enable a reminder on a step.
                     </ThemedText>
                   ) : (
                     targets.map((target) => (
@@ -235,30 +234,13 @@ export default function SettingsScreen() {
               </View>
 
               {closeReminder.enabled && (
-                <View style={styles.timeRow}>
-                  {CLOSE_TIME_OPTIONS.map((time) => {
-                    const selected = time === closeReminder.time;
-                    return (
-                      <Pressable
-                        key={time}
-                        onPress={() => void handleCloseReminderTime(time)}
-                        style={[
-                          styles.timePill,
-                          {
-                            backgroundColor: selected
-                              ? theme.accent
-                              : theme.backgroundSelected,
-                          },
-                        ]}>
-                        <ThemedText
-                          type="smallBold"
-                          style={{ color: selected ? theme.background : theme.text }}>
-                          {format(parse(time, 'HH:mm', new Date()), 'h:mm a')}
-                        </ThemedText>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                <TimeField
+                  label="Reminder time"
+                  value={closeReminder.time}
+                  onChange={(time) => {
+                    if (time) void handleCloseReminderTime(time);
+                  }}
+                />
               )}
             </Card>
           </View>
@@ -354,17 +336,6 @@ const styles = StyleSheet.create({
   },
   targetName: {
     flex: 1,
-  },
-  timeRow: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-    paddingTop: Spacing.two,
-  },
-  timePill: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
   },
   exportCard: {
     gap: Spacing.two,

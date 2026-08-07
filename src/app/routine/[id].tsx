@@ -458,6 +458,7 @@ function toActionInput(action: {
   fixedTime: string | null;
   anchorType: 'after' | 'before' | null;
   anchorTarget: string | null;
+  reminderTime: string | null;
   frequencyType: 'daily' | 'n_per_day' | 'n_per_week' | 'every_n_days' | 'every_2_weeks' | 'monthly' | 'quarterly' | 'yearly' | 'as_needed';
   frequencyValue: number | null;
   minViableLevel: 'essential' | 'standard' | 'full';
@@ -472,6 +473,7 @@ function toActionInput(action: {
     fixedTime: action.fixedTime,
     anchorType: action.anchorType,
     anchorTarget: action.anchorTarget,
+    reminderTime: action.reminderTime,
     frequencyType: action.frequencyType,
     frequencyValue: action.frequencyValue,
     minViableLevel: action.minViableLevel,

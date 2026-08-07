@@ -1,0 +1,1 @@
+ALTER TABLE `actions` ADD `reminder_time` text;

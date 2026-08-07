@@ -57,6 +57,13 @@
       "when": 1786079406315,
       "tag": "0007_workout_cycles",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786081377480,
+      "tag": "0008_action_reminders",
+      "breakpoints": true
     }
   ]
 }

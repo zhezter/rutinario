@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Switch, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { PillGroup } from '@/components/ui/pill-group';
 import { Sheet } from '@/components/ui/sheet';
+import { TimeField } from '@/components/ui/time-field';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import type { ActionInput } from '@/domain/crud/actions';
 import type { AnchorType, FrequencyType, ScheduleType, ViabilityLevel } from '@/db/schema';
+import { useTheme } from '@/hooks/use-theme';
 
 const SCHEDULE_LABELS: Record<ScheduleType, string> = {
   fixed: 'Fixed',
@@ -52,6 +54,7 @@ export function ActionFormSheet({
   onSubmit: (input: ActionInput) => void | Promise<void>;
   onClose: () => void;
 }) {
+  const theme = useTheme();
   const [name, setName] = useState(initial?.name ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [durationMin, setDurationMin] = useState(
@@ -65,6 +68,8 @@ export function ActionFormSheet({
   const [fixedTime, setFixedTime] = useState(initial?.fixedTime ?? '');
   const [anchorType, setAnchorType] = useState<AnchorType>(initial?.anchorType ?? 'after');
   const [anchorTarget, setAnchorTarget] = useState(initial?.anchorTarget ?? '');
+  const [reminderEnabled, setReminderEnabled] = useState(Boolean(initial?.reminderTime));
+  const [reminderTime, setReminderTime] = useState(initial?.reminderTime ?? '');
   const [frequencyType, setFrequencyType] = useState<FrequencyType>(
     initial?.frequencyType ?? 'daily',
   );
@@ -87,6 +92,7 @@ export function ActionFormSheet({
       fixedTime: fixedTime || null,
       anchorType,
       anchorTarget: anchorTarget || null,
+      reminderTime: reminderEnabled ? reminderTime.trim() || '08:00' : null,
       frequencyType,
       frequencyValue: needsValue ? parsePositiveInt(frequencyValue) : null,
       minViableLevel,
@@ -136,11 +142,12 @@ export function ActionFormSheet({
           labels={SCHEDULE_LABELS}
         />
         {scheduleType === 'fixed' ? (
-          <Field
+          <TimeField
             label="Time"
-            value={fixedTime}
-            onChangeText={setFixedTime}
-            placeholder="23:30"
+            value={fixedTime || null}
+            onChange={(value) => setFixedTime(value ?? '')}
+            placeholder="When it happens"
+            allowClear
           />
         ) : null}
         {scheduleType === 'anchored' ? (
@@ -159,6 +166,37 @@ export function ActionFormSheet({
             />
           </View>
         ) : null}
+      </FormBlock>
+
+      <FormBlock label="Reminder">
+        <View style={styles.stack}>
+          <View style={styles.reminderRow}>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.reminderText}>
+              Remind me daily for this step
+            </ThemedText>
+            <Switch
+              value={reminderEnabled}
+              onValueChange={(on) => {
+                setReminderEnabled(on);
+                if (on && !reminderTime) setReminderTime(fixedTime || '08:00');
+              }}
+              trackColor={{ true: theme.accent, false: theme.backgroundSelected }}
+              thumbColor={theme.background}
+            />
+          </View>
+          {reminderEnabled ? (
+            <TimeField
+              label="Reminder time"
+              value={reminderTime || null}
+              onChange={(value) => setReminderTime(value ?? '')}
+              placeholder="Pick a time"
+              allowClear
+            />
+          ) : null}
+          <ThemedText type="small" themeColor="textSecondary">
+            Sends a daily notification at the chosen time.
+          </ThemedText>
+        </View>
       </FormBlock>
 
       <FormBlock label="How often">
@@ -224,5 +262,14 @@ const styles = StyleSheet.create({
   },
   block: {
     gap: Spacing.two,
+  },
+  reminderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.three,
+  },
+  reminderText: {
+    flex: 1,
   },
 });

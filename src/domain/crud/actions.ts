@@ -11,6 +11,7 @@ export type ActionInput = {
   fixedTime?: string | null;
   anchorType?: AnchorType | null;
   anchorTarget?: string | null;
+  reminderTime?: string | null;
   frequencyType: FrequencyType;
   frequencyValue?: number | null;
   minViableLevel: ViabilityLevel;
@@ -75,6 +76,7 @@ function normalize(input: ActionInput) {
       input.scheduleType === 'anchored' ? (input.anchorType ?? null) : null,
     anchorTarget:
       input.scheduleType === 'anchored' ? input.anchorTarget?.trim() || null : null,
+    reminderTime: input.reminderTime?.trim() || null,
     frequencyType: input.frequencyType,
     frequencyValue: input.frequencyValue || null,
     minViableLevel: input.minViableLevel,

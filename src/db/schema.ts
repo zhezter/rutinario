@@ -90,6 +90,7 @@ export const actions = sqliteTable('actions', {
   fixedTime: text('fixed_time'),
   anchorType: text('anchor_type', { enum: anchorTypes }),
   anchorTarget: text('anchor_target'),
+  reminderTime: text('reminder_time'),
 
   frequencyType: text('frequency_type', { enum: frequencyTypes })
     .notNull()

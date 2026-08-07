@@ -1,10 +1,9 @@
 import * as Notifications from 'expo-notifications';
-import { and, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { Platform } from 'react-native';
 
 import { db } from '@/db/client';
 import { actions, appSettings, procedures, routines } from '@/db/schema';
-
 const REMINDER_PREFIX = 'reminder-';
 const REMINDERS_ENABLED_KEY = 'reminders_enabled';
 const ANDROID_CHANNEL_ID = 'reminders';
@@ -61,25 +60,33 @@ export async function requestReminderPermission(): Promise<boolean> {
   return requested.granted;
 }
 
+async function backfillLegacyReminders(): Promise<void> {
+  await db
+    .update(actions)
+    .set({ reminderTime: actions.fixedTime })
+    .where(
+      and(
+        eq(actions.scheduleType, 'fixed'),
+        eq(actions.frequencyType, 'daily'),
+        isNotNull(actions.fixedTime),
+        isNull(actions.reminderTime),
+      ),
+    );
+}
+
 export async function listReminderTargets(): Promise<ReminderTarget[]> {
   const rows = await db
     .select({
       actionId: actions.id,
       name: actions.name,
       routineName: routines.name,
-      time: actions.fixedTime,
+      time: actions.reminderTime,
     })
     .from(actions)
     .innerJoin(procedures, eq(actions.procedureId, procedures.id))
     .innerJoin(routines, eq(procedures.routineId, routines.id))
-    .where(
-      and(
-        eq(actions.scheduleType, 'fixed'),
-        isNotNull(actions.fixedTime),
-        eq(actions.frequencyType, 'daily'),
-      ),
-    )
-    .orderBy(actions.fixedTime);
+    .where(isNotNull(actions.reminderTime))
+    .orderBy(actions.reminderTime);
   return rows.filter(
     (row): row is ReminderTarget => row.time !== null,
   );
@@ -87,6 +94,7 @@ export async function listReminderTargets(): Promise<ReminderTarget[]> {
 
 export async function syncReminders(): Promise<void> {
   await cancelReminders();
+  await backfillLegacyReminders();
 
   const enabled = await getRemindersEnabled();
   const permission = await Notifications.getPermissionsAsync();
