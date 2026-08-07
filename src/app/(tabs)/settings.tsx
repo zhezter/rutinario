@@ -18,6 +18,12 @@ import {
   toCsv,
   toJson,
 } from '@/domain/data/export';
+import {
+  buildFullBackup,
+  backupToJson,
+  parseFullBackup,
+  restoreFullBackup,
+} from '@/domain/data/backup';
 import { importCompletionsJson } from '@/domain/data/import';
 import {
   getCloseReminder,
@@ -156,6 +162,65 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleBackup = async () => {
+    try {
+      const backup = buildFullBackup();
+      const stamp = dateKey(new Date());
+      await shareExport(
+        `rutinario-backup-${stamp}.json`,
+        backupToJson(backup),
+        'application/json',
+      );
+    } catch (err) {
+      Alert.alert('Backup failed', err instanceof Error ? err.message : 'Something went wrong.');
+    }
+  };
+
+  const handleRestore = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/json',
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || result.assets.length === 0) return;
+      const file = new File(result.assets[0].uri);
+      const content = await file.text();
+      const backup = parseFullBackup(content);
+      Alert.alert(
+        'Restore full backup?',
+        'This replaces ALL current data — routines, workouts, history, catalog and settings — with the backup. This cannot be undone.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Restore',
+            style: 'destructive',
+            onPress: () => {
+              void runRestore(backup);
+            },
+          },
+        ],
+      );
+    } catch (err) {
+      Alert.alert(
+        'Restore failed',
+        err instanceof Error ? err.message : 'The file could not be read.',
+      );
+    }
+  };
+
+  const runRestore = async (backup: ReturnType<typeof parseFullBackup>) => {
+    try {
+      const restored = restoreFullBackup(backup);
+      hapticSuccess();
+      Alert.alert('Restore complete', `Restored ${restored} rows across all tables.`);
+    } catch (err) {
+      Alert.alert(
+        'Restore failed',
+        err instanceof Error ? err.message : 'Something went wrong.',
+      );
+    }
+  };
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
@@ -247,6 +312,27 @@ export default function SettingsScreen() {
 
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
+              <Ionicons name="cloud-done-outline" size={16} color={theme.accent} />
+              <ThemedText type="smallBold">Full backup</ThemedText>
+            </View>
+            <Card style={styles.exportCard}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Backup everything — routines, workouts, history, catalog and settings — to a single
+                file you can keep in iCloud Drive or Google Drive.
+              </ThemedText>
+              <View style={styles.exportRow}>
+                <View style={styles.exportButton}>
+                  <GhostButton label="Backup all data" onPress={() => void handleBackup()} />
+                </View>
+                <View style={styles.exportButton}>
+                  <GhostButton label="Restore backup" onPress={() => void handleRestore()} />
+                </View>
+              </View>
+            </Card>
+          </View>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
               <Ionicons name="download-outline" size={16} color={theme.accent} />
               <ThemedText type="smallBold">Export data</ThemedText>
             </View>
@@ -272,8 +358,8 @@ export default function SettingsScreen() {
             </View>
             <Card style={styles.exportCard}>
               <ThemedText type="small" themeColor="textSecondary">
-                Restore a JSON backup exported from Rutinario. Only entries whose actions already
-                exist here are imported.
+                Merge a completion-history file exported from Rutinario. Only entries whose actions
+                already exist here are imported — use “Restore backup” for a full restore.
               </ThemedText>
               <GhostButton label="Import JSON" onPress={() => void handleImport()} />
             </Card>
