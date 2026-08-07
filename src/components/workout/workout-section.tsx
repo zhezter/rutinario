@@ -10,6 +10,7 @@ import { ConfirmSheet, PromptSheet } from '@/components/ui/prompt';
 import { WorkoutTemplatesSheet } from '@/components/workout/workout-templates-sheet';
 import { Spacing } from '@/constants/theme';
 import {
+  clearActiveWorkout,
   createWorkout,
   deleteWorkout,
   listWorkouts,
@@ -47,6 +48,7 @@ export function WorkoutSection() {
   } | null>(null);
   const [showTemplates, setShowTemplates] = useState(false);
   const [addMenu, setAddMenu] = useState(false);
+  const [showSplitPicker, setShowSplitPicker] = useState(false);
 
   useLiveTables(
     ['workouts', 'workout_days', 'workout_exercises', 'exercises', 'exercise_logs'],
@@ -79,6 +81,31 @@ export function WorkoutSection() {
       onPress: handleNewWorkout,
     },
   ];
+
+  const activeWorkout = workouts?.find((workout) => workout.isActive === 1) ?? null;
+
+  const splitActions: SheetAction[] = workouts
+    ? [
+        ...workouts.map((workout) => ({
+          label: workout.name,
+          icon: workout.isActive === 1 ? ('radio-button-on' as const) : ('radio-button-off' as const),
+          onPress: () => {
+            void setActiveWorkout(workout.id);
+          },
+        })),
+        ...(activeWorkout
+          ? [
+              {
+                label: 'No active split',
+                icon: 'remove-circle-outline' as const,
+                onPress: () => {
+                  void clearActiveWorkout();
+                },
+              },
+            ]
+          : []),
+      ]
+    : [];
 
   const menuActions: SheetAction[] = menuTarget
     ? [
@@ -143,6 +170,24 @@ export function WorkoutSection() {
           </Pressable>
         </View>
       </View>
+
+      <Pressable
+        onPress={() => setShowSplitPicker(true)}
+        style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}>
+        <Card style={styles.splitCard}>
+          <View style={styles.splitRow}>
+            <View style={styles.splitText}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Active split this week
+              </ThemedText>
+              <ThemedText type="smallBold">
+                {activeWorkout ? activeWorkout.name : 'None — tap to choose'}
+              </ThemedText>
+            </View>
+            <Ionicons name="chevron-down" size={18} color={theme.textSecondary} />
+          </View>
+        </Card>
+      </Pressable>
 
       {today ? <TodayCard today={today} /> : null}
 
@@ -219,6 +264,13 @@ export function WorkoutSection() {
         title="New workout"
         onClose={() => setAddMenu(false)}
         actions={addActions}
+      />
+
+      <ActionSheet
+        visible={showSplitPicker}
+        title="Split this week"
+        onClose={() => setShowSplitPicker(false)}
+        actions={splitActions}
       />
 
       <WorkoutTemplatesSheet
@@ -335,6 +387,18 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     gap: Spacing.one,
     borderWidth: 1,
+  },
+  splitCard: {
+    padding: Spacing.three,
+    gap: Spacing.one,
+  },
+  splitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  splitText: {
+    gap: Spacing.half,
   },
   todayEyebrow: {
     textTransform: 'uppercase',

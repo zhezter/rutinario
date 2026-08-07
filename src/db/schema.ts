@@ -171,6 +171,7 @@ export const workouts = sqliteTable('workouts', {
   name: text('name').notNull(),
   mode: text('mode', { enum: workoutModes }).notNull().default('weekday'),
   cycleWeeks: integer('cycle_weeks'),
+  isActive: integer('is_active').notNull().default(0),
   defaultRestSec: integer('default_rest_sec').notNull().default(90),
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: integer('created_at')

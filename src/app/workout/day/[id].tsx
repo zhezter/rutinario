@@ -12,6 +12,7 @@ import { ConfirmSheet } from '@/components/ui/prompt';
 import {
   WorkoutExerciseFormSheet,
 } from '@/components/forms/workout-exercise-form';
+import { CatalogPickerSheet } from '@/components/workout/catalog-picker-sheet';
 import { Spacing } from '@/constants/theme';
 import {
   addWorkoutExercise,
@@ -37,6 +38,7 @@ export default function WorkoutDayScreen() {
     initial?: Partial<WorkoutExerciseInput> & { exerciseName?: string };
   } | null>(null);
   const [menuTarget, setMenuTarget] = useState<{ id: number; name: string } | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
   const [confirm, setConfirm] = useState<{
     title: string;
     message: string;
@@ -213,7 +215,7 @@ export default function WorkoutDayScreen() {
         ) : null}
 
         <Pressable
-          onPress={() => setExerciseForm({ mode: 'new' })}
+          onPress={() => setShowPicker(true)}
           style={({ pressed }) => [
             styles.addButton,
             { backgroundColor: theme.backgroundSelected, opacity: pressed ? 0.7 : 1 },
@@ -223,6 +225,25 @@ export default function WorkoutDayScreen() {
         </Pressable>
       </ScrollView>
       </SafeAreaView>
+
+      <CatalogPickerSheet
+        visible={showPicker}
+        onClose={() => setShowPicker(false)}
+        onSelect={(exercise) => {
+          setShowPicker(false);
+          setExerciseForm({
+            mode: 'new',
+            initial: {
+              exerciseName: exercise.name,
+              muscleGroup: exercise.muscleGroup ?? '',
+            },
+          });
+        }}
+        onCreateNew={() => {
+          setShowPicker(false);
+          setExerciseForm({ mode: 'new' });
+        }}
+      />
 
       <ActionSheet
         visible={menuTarget !== null}
