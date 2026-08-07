@@ -34,6 +34,7 @@ export type WorkoutSummary = {
   name: string;
   mode: WorkoutMode;
   cycleWeeks: number | null;
+  isActive: number;
   defaultRestSec: number;
   days: WorkoutDaySummary[];
 };

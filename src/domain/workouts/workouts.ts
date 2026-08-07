@@ -81,6 +81,18 @@ export async function renameWorkout(id: number, name: string): Promise<void> {
   await db.update(workouts).set({ name: name.trim() }).where(eq(workouts.id, id));
 }
 
+export async function setActiveWorkout(id: number): Promise<void> {
+  await db
+    .update(workouts)
+    .set({ isActive: 0 })
+    .where(gt(workouts.id, 0));
+  await db.update(workouts).set({ isActive: 1 }).where(eq(workouts.id, id));
+}
+
+export async function clearActiveWorkout(): Promise<void> {
+  await db.update(workouts).set({ isActive: 0 }).where(gt(workouts.id, 0));
+}
+
 export async function deleteWorkout(id: number): Promise<void> {
   await db.delete(workouts).where(eq(workouts.id, id));
 }

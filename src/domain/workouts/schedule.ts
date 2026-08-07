@@ -45,5 +45,10 @@ function firstWorkoutWithDay(workouts: WorkoutSummary[], weekday: number): Today
 export async function getTodayWorkout(date: Date = new Date()): Promise<TodaySlot | null> {
   const workouts = await listWorkouts();
   if (workouts.length === 0) return null;
+  const active = workouts.find((workout) => workout.isActive === 1);
+  if (active) {
+    const slot = firstWorkoutWithDay([active], date.getDay());
+    if (slot) return slot;
+  }
   return firstWorkoutWithDay(workouts, date.getDay());
 }

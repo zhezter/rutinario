@@ -1,0 +1,1 @@
+ALTER TABLE `workouts` ADD `is_active` integer DEFAULT 0 NOT NULL;

@@ -9,6 +9,7 @@ import { ActivityIndicator, StyleSheet, useColorScheme, View } from 'react-nativ
 import { ThemedText } from '@/components/themed-text';
 import { db } from '@/db/client';
 import migrations from '@/db/migrations/migrations';
+import { seedExerciseCatalog } from '@/domain/workouts/catalog-seed';
 import { seedDatabase } from '@/db/seed';
 import { Spacing } from '@/constants/theme';
 import { useReminderSync } from '@/hooks/useReminderSync';
@@ -24,6 +25,7 @@ function DatabaseGate({ children, fontsReady }: { children: ReactNode; fontsRead
     if (!success || seeded) return;
     let cancelled = false;
     seedDatabase()
+      .then(() => seedExerciseCatalog())
       .then(() => {
         if (!cancelled) setSeeded(true);
       })

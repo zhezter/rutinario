@@ -14,6 +14,7 @@ import {
   deleteWorkout,
   listWorkouts,
   renameWorkout,
+  setActiveWorkout,
   summarizeDay,
 } from '@/domain/workouts/workouts';
 import { getTodayWorkout, type TodaySlot } from '@/domain/workouts/schedule';
@@ -24,6 +25,7 @@ import { useTheme } from '@/hooks/use-theme';
 type MenuTarget = {
   id: number;
   name: string;
+  isActive: number;
 };
 
 export function WorkoutSection() {
@@ -80,6 +82,17 @@ export function WorkoutSection() {
 
   const menuActions: SheetAction[] = menuTarget
     ? [
+        ...(menuTarget.isActive
+          ? []
+          : [
+              {
+                label: 'Set active this week',
+                icon: 'checkmark-circle-outline' as const,
+                onPress: () => {
+                  void setActiveWorkout(menuTarget.id);
+                },
+              },
+            ]),
         {
           label: 'Rename',
           icon: 'pencil-outline',
@@ -153,13 +166,24 @@ export function WorkoutSection() {
                 params: { id: String(workout.id) },
               })
             }
-            onLongPress={() => setMenuTarget({ id: workout.id, name: workout.name })}
+            onLongPress={() =>
+              setMenuTarget({ id: workout.id, name: workout.name, isActive: workout.isActive })
+            }
             delayLongPress={300}>
             {({ pressed }) => (
               <Card style={[styles.workoutCard, pressed && { opacity: 0.6 }]}>
                 <View style={styles.workoutRow}>
                   <View style={styles.workoutText}>
-                    <ThemedText type="smallBold">{workout.name}</ThemedText>
+                    <View style={styles.workoutTitleRow}>
+                      <ThemedText type="smallBold">{workout.name}</ThemedText>
+                      {workout.isActive === 1 ? (
+                        <View style={[styles.activeBadge, { backgroundColor: theme.accent }]}>
+                          <ThemedText type="small" style={{ color: theme.background }}>
+                            Active
+                          </ThemedText>
+                        </View>
+                      ) : null}
+                    </View>
                     <ThemedText type="small" themeColor="textSecondary">
                       {workout.days.length} day{workout.days.length === 1 ? '' : 's'}
                     </ThemedText>
@@ -339,6 +363,16 @@ const styles = StyleSheet.create({
   },
   workoutText: {
     gap: Spacing.half,
+  },
+  workoutTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  activeBadge: {
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.half,
+    borderRadius: Spacing.four,
   },
   dayChips: {
     flexDirection: 'row',

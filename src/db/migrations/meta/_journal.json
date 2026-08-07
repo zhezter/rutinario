@@ -64,6 +64,13 @@
       "when": 1786081377480,
       "tag": "0008_action_reminders",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1786082204019,
+      "tag": "0009_tidy_chat",
+      "breakpoints": true
     }
   ]
 }
