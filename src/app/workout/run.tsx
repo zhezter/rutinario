@@ -18,6 +18,7 @@ import { Spacing } from '@/constants/theme';
 import { getWorkoutDay } from '@/domain/workouts/workouts';
 import {
   clearSet,
+  getBestWeights,
   getDayLogs,
   getDaySessionCount,
   getExerciseBestWeight,
@@ -68,7 +69,11 @@ function formatDuration(ms: number): string {
   return `${m} min ${String(s).padStart(2, '0')} s`;
 }
 
-function buildSteps(day: WorkoutDaySummary, sessionCount: number): WorkoutStep[] {
+function buildSteps(
+  day: WorkoutDaySummary,
+  sessionCount: number,
+  bestWeights: Map<number, number>,
+): WorkoutStep[] {
   const steps: WorkoutStep[] = [];
   for (const slot of day.exercises) {
     const suggested = suggestWeight({
@@ -76,6 +81,7 @@ function buildSteps(day: WorkoutDaySummary, sessionCount: number): WorkoutStep[]
       incrementKg: slot.incrementKg,
       sessionCount,
       cycleWeeks: day.cycleWeeks,
+      bestWeightKg: bestWeights.get(slot.exercise.id) ?? null,
     });
     const targetWeight =
       suggested != null
@@ -233,7 +239,8 @@ export default function WorkoutRunScreen() {
       const sessionCountValue = await getDaySessionCount(
         loaded.exercises.map((slot) => slot.id),
       );
-      const allSteps = buildSteps(loaded, sessionCountValue);
+      const bestWeights = await getBestWeights(loaded.exercises.map((slot) => slot.exercise.id));
+      const allSteps = buildSteps(loaded, sessionCountValue, bestWeights);
       const doneState: Record<string, LoggedInfo> = {};
       for (const step of allSteps) {
         const log = logs

@@ -160,6 +160,12 @@ export function WorkoutSection() {
         </View>
         <View style={styles.headerActions}>
           <Pressable
+            onPress={() => router.push('/workout/week')}
+            hitSlop={8}
+            style={styles.headerButton}>
+            <Ionicons name="calendar-outline" size={22} color={theme.textSecondary} />
+          </Pressable>
+          <Pressable
             onPress={() => router.push('/catalog')}
             hitSlop={8}
             style={styles.headerButton}>

@@ -87,6 +87,24 @@ export async function getExerciseBestWeight(exerciseId: number): Promise<number 
   return value ?? null;
 }
 
+export async function getBestWeights(exerciseIds: number[]): Promise<Map<number, number>> {
+  const result = new Map<number, number>();
+  if (exerciseIds.length === 0) return result;
+  const rows = await db
+    .select({
+      exerciseId: workoutExercises.exerciseId,
+      maxWeight: max(exerciseLogs.weightKg),
+    })
+    .from(exerciseLogs)
+    .innerJoin(workoutExercises, eq(exerciseLogs.workoutExerciseId, workoutExercises.id))
+    .where(inArray(workoutExercises.exerciseId, exerciseIds))
+    .groupBy(workoutExercises.exerciseId);
+  for (const row of rows) {
+    if (row.maxWeight != null) result.set(row.exerciseId, row.maxWeight);
+  }
+  return result;
+}
+
 export async function getDaySessionCount(workoutExerciseIds: number[]): Promise<number> {
   if (workoutExerciseIds.length === 0) return 0;
   const rows = await db
@@ -103,11 +121,13 @@ export function suggestWeight(opts: {
   incrementKg: number | null;
   sessionCount: number;
   cycleWeeks: number | null;
+  bestWeightKg?: number | null;
 }): number | null {
-  const { weightKg, incrementKg, sessionCount, cycleWeeks } = opts;
-  if (weightKg == null) return null;
+  const { weightKg, incrementKg, sessionCount, cycleWeeks, bestWeightKg } = opts;
+  const base = Math.max(weightKg ?? 0, bestWeightKg ?? 0);
+  if (base <= 0) return null;
   const increment = incrementKg ?? DEFAULT_INCREMENT_KG;
   const maxSteps = cycleWeeks != null ? Math.max(0, cycleWeeks - 1) : Number.POSITIVE_INFINITY;
   const steps = Math.min(sessionCount, maxSteps);
-  return Math.round((weightKg + increment * steps) * 10) / 10;
+  return Math.round((base + increment * steps) * 10) / 10;
 }
