@@ -19,8 +19,10 @@ import { getWorkoutDay } from '@/domain/workouts/workouts';
 import {
   clearSet,
   getDayLogs,
+  getDaySessionCount,
   getExerciseBestWeight,
   recordSet,
+  suggestWeight,
 } from '@/domain/workouts/runner';
 import type { WorkoutDaySummary } from '@/domain/workouts/types';
 import { hapticSelection, hapticSuccess } from '@/lib/haptics';
@@ -38,6 +40,8 @@ type WorkoutStep = {
   targetWeight: string;
   targetReps: string;
   restSec: number;
+  incrementKg: number | null;
+  cycleWeeks: number | null;
 };
 
 type LoggedInfo = {
@@ -64,9 +68,21 @@ function formatDuration(ms: number): string {
   return `${m} min ${String(s).padStart(2, '0')} s`;
 }
 
-function buildSteps(day: WorkoutDaySummary): WorkoutStep[] {
+function buildSteps(day: WorkoutDaySummary, sessionCount: number): WorkoutStep[] {
   const steps: WorkoutStep[] = [];
   for (const slot of day.exercises) {
+    const suggested = suggestWeight({
+      weightKg: slot.weightKg,
+      incrementKg: slot.incrementKg,
+      sessionCount,
+      cycleWeeks: day.cycleWeeks,
+    });
+    const targetWeight =
+      suggested != null
+        ? String(suggested)
+        : slot.weightKg != null
+          ? String(slot.weightKg)
+          : '';
     for (let setIndex = 0; setIndex < slot.sets; setIndex++) {
       steps.push({
         key: `${slot.id}:${setIndex}`,
@@ -76,9 +92,11 @@ function buildSteps(day: WorkoutDaySummary): WorkoutStep[] {
         muscleGroup: slot.exercise.muscleGroup,
         setIndex,
         exerciseSets: slot.sets,
-        targetWeight: slot.weightKg != null ? String(slot.weightKg) : '',
+        targetWeight,
         targetReps: slot.reps,
         restSec: slot.restSec ?? day.restSec ?? 90,
+        incrementKg: slot.incrementKg,
+        cycleWeeks: day.cycleWeeks,
       });
     }
   }
@@ -150,6 +168,7 @@ export default function WorkoutRunScreen() {
   const [phase, setPhase] = useState<'warmup' | 'workout' | 'done'>('warmup');
   const [rest, setRest] = useState<RestState | null>(null);
   const [pr, setPr] = useState<{ exerciseName: string; weight: number } | null>(null);
+  const [sessionCount, setSessionCount] = useState(0);
   const [now, setNow] = useState(() => Date.now());
 
   const stepsRef = useRef(steps);
@@ -211,7 +230,10 @@ export default function WorkoutRunScreen() {
         loaded.exercises.map((slot) => slot.id),
         new Date(),
       );
-      const allSteps = buildSteps(loaded);
+      const sessionCountValue = await getDaySessionCount(
+        loaded.exercises.map((slot) => slot.id),
+      );
+      const allSteps = buildSteps(loaded, sessionCountValue);
       const doneState: Record<string, LoggedInfo> = {};
       for (const step of allSteps) {
         const log = logs
@@ -230,6 +252,7 @@ export default function WorkoutRunScreen() {
       setDay(loaded);
       setSteps(allSteps);
       setDone(doneState);
+      setSessionCount(sessionCountValue);
       currentRef.current = startIndex;
       setCurrent(startIndex);
       setWeight(prefill.weight);
@@ -392,6 +415,23 @@ export default function WorkoutRunScreen() {
                   <ThemedText type="title" style={styles.exerciseName}>
                     {currentStep.exerciseName}
                   </ThemedText>
+
+                  {currentStep.targetWeight ? (
+                    <View style={styles.progressionRow}>
+                      <Ionicons
+                        name="trending-up"
+                        size={14}
+                        color={theme.textSecondary}
+                      />
+                      <ThemedText type="small" themeColor="textSecondary">
+                        {sessionCount > 0
+                          ? `Session ${sessionCount + 1}${currentStep.cycleWeeks ? ` of ${currentStep.cycleWeeks}` : ''} · suggested ${currentStep.targetWeight} kg (+${currentStep.incrementKg ?? 2.5}/session)`
+                          : currentStep.incrementKg != null
+                            ? `Starting ${currentStep.targetWeight} kg · +${currentStep.incrementKg}/session`
+                            : `Starting ${currentStep.targetWeight} kg`}
+                      </ThemedText>
+                    </View>
+                  ) : null}
 
                   <View style={styles.setRow}>
                     <SetDots
@@ -726,6 +766,11 @@ const styles = StyleSheet.create({
   eyebrow: {
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  progressionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
   },
   exerciseName: {
     fontSize: 30,

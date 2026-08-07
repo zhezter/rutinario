@@ -169,6 +169,7 @@ export const workouts = sqliteTable('workouts', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
   mode: text('mode', { enum: workoutModes }).notNull().default('weekday'),
+  cycleWeeks: integer('cycle_weeks'),
   defaultRestSec: integer('default_rest_sec').notNull().default(90),
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: integer('created_at')
@@ -211,6 +212,7 @@ export const workoutExercises = sqliteTable('workout_exercises', {
   reps: text('reps').notNull().default('10'),
   restSec: integer('rest_sec'),
   weightKg: real('weight_kg'),
+  incrementKg: real('increment_kg'),
   orderIndex: integer('order_index').notNull().default(0),
   notes: text('notes'),
   createdAt: integer('created_at')

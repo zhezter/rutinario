@@ -8,6 +8,7 @@ import m0003 from './0003_dazzling_nova.sql';
 import m0004 from './0004_thick_bullseye.sql';
 import m0005 from './0005_mature_may_parker.sql';
 import m0006 from './0006_giant_the_leader.sql';
+import m0007 from './0007_workout_cycles.sql';
 
   export default {
     journal,
@@ -18,7 +19,8 @@ m0002,
 m0003,
 m0004,
 m0005,
-m0006
+m0006,
+m0007
     }
   }
   

@@ -75,6 +75,7 @@ export default function WorkoutDayScreen() {
                 reps: slot.reps,
                 restSec: slot.restSec ?? undefined,
                 weightKg: slot.weightKg ?? undefined,
+                incrementKg: slot.incrementKg ?? undefined,
                 notes: slot.notes ?? '',
               },
             });
@@ -136,6 +137,7 @@ export default function WorkoutDayScreen() {
             `${slot.sets} × ${slot.reps}`,
             slot.restSec != null ? `${slot.restSec}s rest` : null,
             slot.weightKg != null ? `${slot.weightKg} kg` : null,
+            slot.incrementKg != null ? `+${slot.incrementKg} kg/wk` : null,
           ]
             .filter((part): part is string => part !== null)
             .join(' · ');
@@ -153,6 +155,7 @@ export default function WorkoutDayScreen() {
                     reps: slot.reps,
                     restSec: slot.restSec ?? undefined,
                     weightKg: slot.weightKg ?? undefined,
+                    incrementKg: slot.incrementKg ?? undefined,
                     notes: slot.notes ?? '',
                   },
                 })

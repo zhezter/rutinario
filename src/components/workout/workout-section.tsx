@@ -118,9 +118,17 @@ export function WorkoutSection() {
             Your training split
           </ThemedText>
         </View>
-        <Pressable onPress={() => setAddMenu(true)} hitSlop={8} style={styles.headerButton}>
-          <Ionicons name="add-circle-outline" size={22} color={theme.accent} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => router.push('/catalog')}
+            hitSlop={8}
+            style={styles.headerButton}>
+            <Ionicons name="library-outline" size={22} color={theme.textSecondary} />
+          </Pressable>
+          <Pressable onPress={() => setAddMenu(true)} hitSlop={8} style={styles.headerButton}>
+            <Ionicons name="add-circle-outline" size={22} color={theme.accent} />
+          </Pressable>
+        </View>
       </View>
 
       {today ? <TodayCard today={today} /> : null}
@@ -291,6 +299,10 @@ const styles = StyleSheet.create({
   },
   headerText: {
     gap: Spacing.half,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   headerButton: {
     padding: Spacing.one,

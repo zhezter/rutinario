@@ -15,7 +15,7 @@ import type {
 } from '@/domain/workouts/types';
 
 export async function listWorkouts(): Promise<WorkoutSummary[]> {
-  return db.query.workouts.findMany({
+  const rows = await db.query.workouts.findMany({
     with: {
       days: {
         orderBy: (days, { asc: ascFn }) => [ascFn(days.position)],
@@ -29,6 +29,10 @@ export async function listWorkouts(): Promise<WorkoutSummary[]> {
     },
     orderBy: (rows, { asc: ascFn }) => [ascFn(rows.sortOrder)],
   });
+  return rows.map((workout) => ({
+    ...workout,
+    days: workout.days.map((day) => ({ ...day, cycleWeeks: workout.cycleWeeks })),
+  }));
 }
 
 export async function getWorkout(id: number): Promise<WorkoutSummary | null> {
@@ -40,13 +44,16 @@ export async function getWorkoutDay(id: number): Promise<WorkoutDaySummary | nul
   const day = await db.query.workoutDays.findFirst({
     where: (rows, { eq: eqFn }) => eqFn(rows.id, id),
     with: {
+      workout: true,
       exercises: {
         orderBy: (slots, { asc: ascFn }) => [ascFn(slots.orderIndex)],
         with: { exercise: true },
       },
     },
   });
-  return day ?? null;
+  if (!day) return null;
+  const { workout, ...rest } = day;
+  return { ...rest, cycleWeeks: workout.cycleWeeks };
 }
 
 export async function createWorkout(name: string): Promise<WorkoutSummary> {
@@ -58,6 +65,16 @@ export async function createWorkout(name: string): Promise<WorkoutSummary> {
   const created = await getWorkout(row.id);
   if (!created) throw new Error('Workout could not be created.');
   return created;
+}
+
+export async function updateWorkoutCycle(workoutId: number, cycleWeeks: number | null): Promise<void> {
+  await db
+    .update(workouts)
+    .set({
+      cycleWeeks: cycleWeeks != null ? Math.max(1, Math.round(cycleWeeks)) : null,
+      mode: cycleWeeks != null ? 'cycle' : 'weekday',
+    })
+    .where(eq(workouts.id, workoutId));
 }
 
 export async function renameWorkout(id: number, name: string): Promise<void> {
@@ -179,6 +196,7 @@ export async function addWorkoutExercise(
       reps: input.reps,
       restSec: input.restSec ?? null,
       weightKg: input.weightKg ?? null,
+      incrementKg: input.incrementKg ?? null,
       notes: input.notes?.trim() || null,
       orderIndex: day?.exercises.length ?? 0,
     })
@@ -212,6 +230,7 @@ export async function updateWorkoutExercise(
       reps: input.reps,
       restSec: input.restSec ?? null,
       weightKg: input.weightKg ?? null,
+      incrementKg: input.incrementKg ?? null,
       notes: input.notes?.trim() || null,
     })
     .where(eq(workoutExercises.id, id));

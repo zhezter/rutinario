@@ -8,6 +8,7 @@ export type WorkoutExerciseSummary = {
   reps: string;
   restSec: number | null;
   weightKg: number | null;
+  incrementKg: number | null;
   orderIndex: number;
   notes: string | null;
   exercise: {
@@ -24,6 +25,7 @@ export type WorkoutDaySummary = {
   position: number;
   weekday: number | null;
   restSec: number | null;
+  cycleWeeks: number | null;
   exercises: WorkoutExerciseSummary[];
 };
 
@@ -31,6 +33,7 @@ export type WorkoutSummary = {
   id: number;
   name: string;
   mode: WorkoutMode;
+  cycleWeeks: number | null;
   defaultRestSec: number;
   days: WorkoutDaySummary[];
 };
@@ -42,5 +45,6 @@ export type WorkoutExerciseInput = {
   reps: string;
   restSec?: number;
   weightKg?: number;
+  incrementKg?: number;
   notes?: string;
 };

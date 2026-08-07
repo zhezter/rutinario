@@ -1,4 +1,4 @@
-import { and, eq, max } from 'drizzle-orm';
+import { and, eq, inArray, max } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { exerciseLogs, workoutExercises } from '@/db/schema';
@@ -85,4 +85,29 @@ export async function getExerciseBestWeight(exerciseId: number): Promise<number 
     .where(eq(workoutExercises.exerciseId, exerciseId));
   const value = rows[0]?.maxWeight ?? null;
   return value ?? null;
+}
+
+export async function getDaySessionCount(workoutExerciseIds: number[]): Promise<number> {
+  if (workoutExerciseIds.length === 0) return 0;
+  const rows = await db
+    .select({ date: exerciseLogs.date })
+    .from(exerciseLogs)
+    .where(inArray(exerciseLogs.workoutExerciseId, workoutExerciseIds));
+  return new Set(rows.map((row) => row.date)).size;
+}
+
+export const DEFAULT_INCREMENT_KG = 2.5;
+
+export function suggestWeight(opts: {
+  weightKg: number | null;
+  incrementKg: number | null;
+  sessionCount: number;
+  cycleWeeks: number | null;
+}): number | null {
+  const { weightKg, incrementKg, sessionCount, cycleWeeks } = opts;
+  if (weightKg == null) return null;
+  const increment = incrementKg ?? DEFAULT_INCREMENT_KG;
+  const maxSteps = cycleWeeks != null ? Math.max(0, cycleWeeks - 1) : Number.POSITIVE_INFINITY;
+  const steps = Math.min(sessionCount, maxSteps);
+  return Math.round((weightKg + increment * steps) * 10) / 10;
 }

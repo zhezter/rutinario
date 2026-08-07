@@ -22,6 +22,7 @@ import {
   renameWorkout,
   renameWorkoutDay,
   summarizeDay,
+  updateWorkoutCycle,
   updateWorkoutDay,
 } from '@/domain/workouts/workouts';
 import { weekdayLabel } from '@/domain/workouts/schedule';
@@ -42,6 +43,7 @@ export default function WorkoutDetailScreen() {
   } | null>(null);
   const [prompt, setPrompt] = useState<{
     title: string;
+    message?: string;
     submitLabel: string;
     initialValue?: string;
     onSubmit: (value: string) => void;
@@ -143,6 +145,43 @@ export default function WorkoutDetailScreen() {
             <Ionicons name="pencil-outline" size={22} color={theme.textSecondary} />
           </Pressable>
         </View>
+
+        {workout ? (
+          <Card style={styles.cycleCard}>
+            <View style={styles.cycleRow}>
+              <View style={styles.cycleText}>
+                <ThemedText type="smallBold">Progression cycle</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {workout.cycleWeeks
+                    ? `Weights climb across ${workout.cycleWeeks} weeks, then hold.`
+                    : 'Off — weights stay as configured.'}
+                </ThemedText>
+              </View>
+              <Pressable
+                onPress={() =>
+                  setPrompt({
+                    title: 'Cycle length (weeks)',
+                    message:
+                      'Each exercise adds its “Weekly +kg” every session until the cycle finishes. Enter 0 to turn cycles off.',
+                    initialValue: workout.cycleWeeks != null ? String(workout.cycleWeeks) : '',
+                    submitLabel: 'Save',
+                    onSubmit: async (value) => {
+                      const weeks = Number.parseInt(value, 10);
+                      await updateWorkoutCycle(
+                        workoutId,
+                        Number.isNaN(weeks) || weeks <= 0 ? null : weeks,
+                      );
+                    },
+                  })
+                }
+                hitSlop={8}>
+                <ThemedText type="smallBold" style={{ color: theme.accent }}>
+                  {workout.cycleWeeks ? `${workout.cycleWeeks} weeks` : 'Configure'}
+                </ThemedText>
+              </Pressable>
+            </View>
+          </Card>
+        ) : null}
 
         {workout?.days.map((day, index) => {
           const summary = summarizeDay(day);
@@ -258,6 +297,7 @@ export default function WorkoutDetailScreen() {
         <PromptSheet
           visible
           title={prompt.title}
+          message={prompt.message}
           initialValue={prompt.initialValue}
           submitLabel={prompt.submitLabel}
           onSubmit={async (value) => {
@@ -314,6 +354,19 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     lineHeight: 30,
+  },
+  cycleCard: {
+    padding: Spacing.three,
+  },
+  cycleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.three,
+  },
+  cycleText: {
+    flex: 1,
+    gap: Spacing.half,
   },
   dayCard: {
     padding: Spacing.three,

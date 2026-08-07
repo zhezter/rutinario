@@ -40,6 +40,9 @@ export function WorkoutExerciseFormSheet({
   const [reps, setReps] = useState(initial?.reps ?? '10');
   const [rest, setRest] = useState(initial?.restSec != null ? String(initial.restSec) : '');
   const [weight, setWeight] = useState(initial?.weightKg != null ? String(initial.weightKg) : '');
+  const [increment, setIncrement] = useState(
+    initial?.incrementKg != null ? String(initial.incrementKg) : '',
+  );
   const [notes, setNotes] = useState(initial?.notes ?? '');
 
   const handleSubmit = () => {
@@ -51,6 +54,7 @@ export function WorkoutExerciseFormSheet({
       reps: reps.trim() || '10',
       restSec: toInt(rest),
       weightKg: toNum(weight),
+      incrementKg: toNum(increment),
       notes: notes.trim() || undefined,
     });
   };
@@ -113,10 +117,21 @@ export function WorkoutExerciseFormSheet({
             placeholder="—"
           />
         </View>
+        <View style={styles.rowItem}>
+          <Field
+            label="Weekly +kg"
+            value={increment}
+            onChangeText={setIncrement}
+            keyboardType="decimal-pad"
+            style={styles.numInput}
+            placeholder="2.5"
+          />
+        </View>
       </View>
       <Field label="Notes (optional)" value={notes} onChangeText={setNotes} multiline />
       <ThemedText type="small" themeColor="textSecondary">
-        Sets are recorded per exercise. Weight and reps are saved when you check a set.
+        Weight is the starting point; a weekly +kg makes the player suggest a heavier load after
+        every completed session.
       </ThemedText>
       <PrimaryButton label={submitLabel} onPress={handleSubmit} />
     </Sheet>
