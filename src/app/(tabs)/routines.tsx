@@ -1,7 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useRef, useState } from 'react';
+import {
+  Animated,
+  Easing,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -26,6 +33,7 @@ import { ActionSheet, type SheetAction } from '@/components/ui/sheet';
 import { PromptSheet, ConfirmSheet } from '@/components/ui/prompt';
 import { RoutineFormSheet, type RoutineFormResult } from '@/components/forms/routine-form';
 import { WorkoutSection } from '@/components/workout/workout-section';
+import { MountFadeIn } from '@/components/ui/mount-fade-in';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 
 type PromptState = {
@@ -247,11 +255,12 @@ export default function RoutinesScreen() {
             </Pressable>
           </View>
 
-          {subtab === 'workout' ? (
-            <WorkoutSection />
-          ) : (
-            <>
-              <View style={styles.header}>
+          <MountFadeIn key={subtab}>
+            {subtab === 'workout' ? (
+              <WorkoutSection />
+            ) : (
+              <>
+                <View style={styles.header}>
                 <View style={styles.headerText}>
                   <ThemedText type="title" style={styles.title}>
                     Routines
@@ -291,8 +300,9 @@ export default function RoutinesScreen() {
                   No routines yet — tap + to create your first one.
                 </ThemedText>
               ) : null}
-            </>
-          )}
+              </>
+            )}
+          </MountFadeIn>
         </ScrollView>
       </SafeAreaView>
 
@@ -381,11 +391,37 @@ function DomainBlock({
 }) {
   const theme = useTheme();
   const [expanded, setExpanded] = useState(false);
+  const [contentHeight, setContentHeight] = useState(0);
+  const progress = useRef(new Animated.Value(0)).current;
+
+  const toggle = () => {
+    const next = !expanded;
+    setExpanded(next);
+    Animated.timing(progress, {
+      toValue: next ? 1 : 0,
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const chevronRotation = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+  const animatedHeight = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, contentHeight],
+  });
+  const contentOpacity = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
 
   return (
-    <View style={styles.domain}>
+    <View>
       <Pressable
-        onPress={() => setExpanded((current) => !current)}
+        onPress={toggle}
         onLongPress={() => onLongPressDomain({ id: domain.id, name: domain.name })}
         delayLongPress={300}
         style={({ pressed }) => [styles.domainHeader, pressed && { opacity: 0.7 }]}>
@@ -393,15 +429,17 @@ function DomainBlock({
         <ThemedText type="smallBold" style={styles.domainName}>
           {domain.name}
         </ThemedText>
-        <Ionicons
-          name={expanded ? 'chevron-up' : 'chevron-down'}
-          size={18}
-          color={theme.textSecondary}
-        />
+        <Animated.View style={{ transform: [{ rotate: chevronRotation }] }}>
+          <Ionicons name="chevron-down" size={18} color={theme.textSecondary} />
+        </Animated.View>
       </Pressable>
 
-      {expanded
-        ? domain.systems.map((system) => (
+      <Animated.View
+        style={[styles.collapsible, { height: animatedHeight, opacity: contentOpacity }]}>
+        <View
+          style={styles.domainContent}
+          onLayout={(event) => setContentHeight(event.nativeEvent.layout.height)}>
+          {domain.systems.map((system) => (
             <View key={system.id} style={styles.system}>
               <Pressable
                 onLongPress={() =>
@@ -459,8 +497,9 @@ function DomainBlock({
                 );
               })}
             </View>
-          ))
-        : null}
+          ))}
+        </View>
+      </Animated.View>
     </View>
   );
 }
@@ -511,12 +550,16 @@ const styles = StyleSheet.create({
   headerButton: {
     padding: Spacing.one,
   },
-  domain: {
-    gap: Spacing.two,
-  },
   domainHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: Spacing.two,
+    paddingTop: Spacing.two,
+  },
+  collapsible: {
+    overflow: 'hidden',
+  },
+  domainContent: {
     gap: Spacing.two,
     paddingTop: Spacing.two,
   },
