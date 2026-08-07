@@ -183,7 +183,19 @@ export default function WorkoutDayScreen() {
                         </ThemedText>
                       ) : null}
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+                    <View style={styles.exerciseActions}>
+                      <Pressable
+                        onPress={() =>
+                          router.push({
+                            pathname: '/workout/progression',
+                            params: { exerciseId: String(slot.exercise.id) },
+                          })
+                        }
+                        hitSlop={8}>
+                        <Ionicons name="trending-up-outline" size={20} color={theme.accent} />
+                      </Pressable>
+                      <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+                    </View>
                   </View>
                 </Card>
               )}
@@ -291,6 +303,11 @@ const styles = StyleSheet.create({
   exerciseText: {
     flex: 1,
     gap: Spacing.half,
+  },
+  exerciseActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
   },
   emptyCard: {
     padding: Spacing.three,

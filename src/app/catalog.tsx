@@ -94,6 +94,15 @@ export default function CatalogScreen() {
   const menuActions: SheetAction[] = menuTarget
     ? [
         {
+          label: 'View progression',
+          icon: 'trending-up-outline',
+          onPress: () =>
+            router.push({
+              pathname: '/workout/progression',
+              params: { exerciseId: String(menuTarget.id) },
+            }),
+        },
+        {
           label: 'Rename',
           icon: 'pencil-outline',
           onPress: () =>
