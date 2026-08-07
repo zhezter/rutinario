@@ -1,3 +1,5 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
@@ -11,10 +13,10 @@ import { seedDatabase } from '@/db/seed';
 import { Spacing } from '@/constants/theme';
 import { useReminderSync } from '@/hooks/useReminderSync';
 
-function DatabaseGate({ children }: { children: ReactNode }) {
+function DatabaseGate({ children, fontsReady }: { children: ReactNode; fontsReady: boolean }) {
   const { success, error } = useMigrations(db, migrations);
   const [seeded, setSeeded] = useState(false);
-  const ready = success && seeded;
+  const ready = success && seeded && fontsReady;
 
   useReminderSync(ready);
 
@@ -55,10 +57,15 @@ function DatabaseGate({ children }: { children: ReactNode }) {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const [fontsLoaded, fontsError] = useFonts(Ionicons.font);
+
+  useEffect(() => {
+    if (fontsError) console.error('Icon font failed to load', fontsError);
+  }, [fontsError]);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <DatabaseGate>
+      <DatabaseGate fontsReady={fontsLoaded || !!fontsError}>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="routine/[id]" options={{ headerShown: true, title: '' }} />
